@@ -1,5 +1,6 @@
 ﻿
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
@@ -140,6 +141,31 @@ const DEFAULT_POPUP: PopupRow = {
   cta_href: "/shop",
   product_id: null,
 };
+
+const ADMIN_NAV_GROUPS = [
+  {
+    title: "Storefront",
+    links: [
+      { href: "/", label: "Open Home" },
+      { href: "/shop", label: "Open Shop" },
+      { href: "/upload", label: "Open Upload" },
+      { href: "/about", label: "Open About" },
+      { href: "/contact", label: "Open Contact" },
+    ],
+  },
+  {
+    title: "Editor Tools",
+    links: [
+      { href: "/admin/content", label: "Edit About/Contact Content" },
+      { href: "/admin#product-inventory", label: "Manage Inventory" },
+      { href: "/admin/how-to", label: "How To Edit Pages" },
+    ],
+  },
+  {
+    title: "Session",
+    links: [{ href: "/logout", label: "Admin Sign Out" }],
+  },
+] as const;
 
 function formatUsd(amountCents: number) {
   return new Intl.NumberFormat("en-US", {
@@ -295,6 +321,33 @@ async function getContactMessages() {
   return (result.data ?? []) as ContactMessageRow[];
 }
 
+function AdminDropdownSection({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id?: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <details id={id} className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl text-forest">{title}</h2>
+          <p className="mt-1 text-sm text-foreground/70">{description}</p>
+        </div>
+        <span className="mt-1 rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900">
+          Expand
+        </span>
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
+  );
+}
+
 export default async function AdminPage() {
   const [orders, categories, products, homepage, popup, welcomePosts, messages] =
     await Promise.all([
@@ -342,25 +395,56 @@ export default async function AdminPage() {
           Manage homepage copy, categories, products, welcome cards, customer
           messages, uploads, and orders from one dashboard.
         </p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          {[
-            { href: "/", label: "Open Home" },
-            { href: "/shop", label: "Open Shop" },
-            { href: "/upload", label: "Open Upload" },
-            { href: "/contact", label: "Open Contact" },
-            { href: "/about", label: "Open About" },
-            { href: "/admin/content", label: "Edit About/Contact Content" },
-            { href: "/admin#product-inventory", label: "Manage Inventory" },
-            { href: "/admin/how-to", label: "How To Edit Pages" },
-            { href: "/logout", label: "Admin Sign Out" },
-          ].map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-xl border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-semibold text-forest transition-colors hover:bg-gold hover:text-white"
-            >
-              {link.label}
-            </Link>
+
+        <details className="mt-5 rounded-2xl border border-rose/20 bg-white/70 p-3 md:hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-forest">Admin Menu</span>
+            <span aria-hidden="true" className="inline-flex flex-col gap-1">
+              <span className="h-[2px] w-5 bg-forest" />
+              <span className="h-[2px] w-5 bg-forest" />
+              <span className="h-[2px] w-5 bg-forest" />
+            </span>
+          </summary>
+          <div className="mt-3 space-y-4">
+            {ADMIN_NAV_GROUPS.map((group) => (
+              <section key={group.title}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+                  {group.title}
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {group.links.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="block text-sm font-semibold text-forest hover:text-rose"
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </details>
+
+        <div className="mt-5 hidden gap-3 md:grid md:grid-cols-3">
+          {ADMIN_NAV_GROUPS.map((group) => (
+            <section key={group.title} className="rounded-2xl border border-rose/20 bg-white/70 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
+                {group.title}
+              </p>
+              <div className="mt-2 space-y-1.5">
+                {group.links.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="block text-sm font-semibold text-forest hover:text-rose"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </header>
@@ -372,11 +456,10 @@ export default async function AdminPage() {
         latestOrderId={latestOrderId}
       />
 
-      <section className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5">
-        <h2 className="text-2xl text-forest">Homepage Hero</h2>
-        <p className="mt-1 text-sm text-foreground/70">
-          This controls the top-left copy block on the home page.
-        </p>
+      <AdminDropdownSection
+        title="Homepage Hero"
+        description="This controls the top-left copy block on the home page."
+      >
         <form action={saveHomepageSettings} className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
             <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Badge</span>
@@ -410,13 +493,12 @@ export default async function AdminPage() {
             <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Save Homepage Hero</button>
           </div>
         </form>
-      </section>
+      </AdminDropdownSection>
 
-      <section className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5">
-        <h2 className="text-2xl text-forest">Promotional Popup</h2>
-        <p className="mt-1 text-sm text-foreground/70">
-          This controls the popup modal only. It is separate from featured products and homepage feature cards.
-        </p>
+      <AdminDropdownSection
+        title="Promotional Popup"
+        description="This controls the popup modal only. It is separate from featured products and homepage feature cards."
+      >
         <form action={savePromoPopup} className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
             <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Popup Label</span>
@@ -457,13 +539,12 @@ export default async function AdminPage() {
             <button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">Save Popup</button>
           </div>
         </form>
-      </section>
+      </AdminDropdownSection>
 
-      <section className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5">
-        <h2 className="text-2xl text-forest">Homepage Feature Cards</h2>
-        <p className="mt-1 text-sm text-foreground/70">
-          Edit cards shown on Home under Homepage Highlights (not the popup modal).
-        </p>
+      <AdminDropdownSection
+        title="Homepage Feature Cards"
+        description="Edit cards shown on Home under Homepage Highlights (not the popup modal)."
+      >
 
         <form action={createWelcomePost} className="mt-4 grid gap-3 rounded-2xl border border-rose/15 bg-surface p-4 md:grid-cols-2">
           <label className="space-y-1">
@@ -514,14 +595,13 @@ export default async function AdminPage() {
             </article>
           ))}
         </div>
-      </section>
+      </AdminDropdownSection>
 
-      <section className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5">
-        <h2 className="text-2xl text-forest">Categories</h2>
-        <p className="mt-1 text-sm text-foreground/70">
-          Keep this compact by editing categories in dropdown rows.
-        </p>
-        <details className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3" open>
+      <AdminDropdownSection
+        title="Categories"
+        description="Keep this compact by editing categories in dropdown rows."
+      >
+        <details className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3">
           <summary className="cursor-pointer list-none text-sm font-semibold text-forest">
             Add Category
           </summary>
@@ -570,13 +650,13 @@ export default async function AdminPage() {
             </details>
           ))}
         </div>
-      </section>
+      </AdminDropdownSection>
 
-      <section id="product-inventory" className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5">
-        <h2 className="text-2xl text-forest">Product Inventory</h2>
-        <p className="mt-1 text-sm text-foreground/70">
-          Product cards are collapsed by default to keep the backend concise and scannable.
-        </p>
+      <AdminDropdownSection
+        id="product-inventory"
+        title="Product Inventory"
+        description="Product cards are collapsed by default to keep the backend concise and scannable."
+      >
         <details className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3">
           <summary className="cursor-pointer list-none text-sm font-semibold text-forest">
             Add New Product Card
@@ -691,7 +771,7 @@ export default async function AdminPage() {
             </details>
           ))}
         </div>
-      </section>
+      </AdminDropdownSection>
 
       <section id="customer-messages" className="mt-8 space-y-4">
         <h2 className="text-2xl text-forest">Customer Messages</h2>
