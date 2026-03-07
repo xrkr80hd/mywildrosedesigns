@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f3ee;
+  --foreground: #1c1a19;
+  --surface: #fffaf6;
+  --surface-strong: #f6e5db;
+  --rose: #9f3b55;
+  --rose-soft: #c97389;
+  --forest: #2f4b3c;
+  --gold: #bb8242;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-rose: var(--rose);
+  --color-rose-soft: var(--rose-soft);
+  --color-forest: var(--forest);
+  --color-gold: var(--gold);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-heading);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), sans-serif;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading), serif;
+}
+
+.rose-panel {
+  background: linear-gradient(135deg, rgba(201, 115, 137, 0.18), rgba(187, 130, 66, 0.16));
+}
+
+.hero-mesh {
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(159, 59, 85, 0.2), transparent 38%),
+    radial-gradient(circle at 100% 100%, rgba(47, 75, 60, 0.15), transparent 42%);
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(159, 59, 85, 0.3);
+  border-left: 4px solid var(--rose);
+  border-radius: 0.85rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(246, 229, 219, 0.9));
+  padding: 0.42rem 0.9rem 0.42rem 0.72rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rose);
+  box-shadow:
+    0 10px 22px rgba(47, 75, 60, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.hero-kicker::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--rose), var(--gold));
+  box-shadow: 0 0 0 3px rgba(159, 59, 85, 0.12);
+}
+
+@media (max-width: 480px) {
+  .hero-kicker {
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    padding: 0.38rem 0.72rem 0.38rem 0.58rem;
+  }
+}
+
+.nav-underline {
+  display: inline-flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  padding: 0.3rem 0.1rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--forest);
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.nav-underline:hover {
+  border-bottom-color: var(--rose);
+  color: var(--rose);
+}
+
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(159, 59, 85, 0.28);
+  border-bottom-width: 3px;
+  border-radius: 0.45rem;
+  background: #fff;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--forest);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.filter-tab:hover {
+  border-color: rgba(159, 59, 85, 0.75);
+}
+
+.filter-tab-active {
+  border-color: var(--rose);
+  background: var(--rose);
+  color: #fff;
+}
+
+.admin-shell {
+  min-height: 100%;
+  background-image:
+    radial-gradient(circle at 10% -10%, rgba(201, 115, 137, 0.26), transparent 34%),
+    radial-gradient(circle at 95% 5%, rgba(187, 130, 66, 0.2), transparent 30%),
+    linear-gradient(165deg, #161211 0%, #231917 48%, #1f2823 100%);
+}
+
+.admin-shell-banner {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.85rem;
+  align-items: center;
+  border-bottom: 1px solid rgba(201, 115, 137, 0.5);
+  background: rgba(22, 17, 16, 0.92);
+  padding: 0.65rem 1rem;
+  color: #f3dfca;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.admin-shell-banner strong {
+  font-size: 0.75rem;
+}
+
+.admin-shell-banner span {
+  font-size: 0.7rem;
+  color: rgba(243, 223, 202, 0.85);
+}
+
+.admin-content {
+  border-left: 1px solid rgba(201, 115, 137, 0.2);
+  border-right: 1px solid rgba(201, 115, 137, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+}
+
+.admin-toast-wrap {
+  position: fixed;
+  left: 50%;
+  top: 1rem;
+  z-index: 60;
+  width: min(28rem, calc(100vw - 2rem));
+  transform: translateX(-50%);
+}
+
+.admin-toast {
+  border-radius: 0.9rem;
+  border: 1px solid transparent;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+}
+
+.admin-toast-success {
+  border-color: rgba(88, 164, 116, 0.45);
+  background: rgba(20, 68, 42, 0.94);
+  color: #d8f2e2;
+}
+
+.admin-toast-error {
+  border-color: rgba(226, 110, 130, 0.5);
+  background: rgba(94, 28, 41, 0.95);
+  color: #ffd9df;
+}

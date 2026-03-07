@@ -1,0 +1,116 @@
+import type { Metadata } from "next";
+import Image from "next/image";
+import Link from "next/link";
+import { getStorefrontData } from "@/lib/storefront";
+
+type ShopPageProps = {
+  searchParams?: {
+    category?: string;
+  };
+};
+
+export const metadata: Metadata = {
+  title: "Shop",
+  description: "Browse Wild Rose Design product categories and add items to your cart.",
+};
+
+export const dynamic = "force-dynamic";
+
+export default async function ShopPage({ searchParams }: ShopPageProps) {
+  const data = await getStorefrontData();
+  const category = searchParams?.category?.trim() ?? "";
+  const products = category
+    ? data.products.filter((product) => product.categoryName === category)
+    : data.products;
+  const grouped = data.categoryNames
+    .map((categoryName) => ({
+      categoryName,
+      items: products.filter((product) => product.categoryName === categoryName),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  if (!category && grouped.length === 0 && products.length > 0) {
+    grouped.push({
+      categoryName: "Products",
+      items: products,
+    });
+  }
+
+  return (
+    <main className="mx-auto w-full max-w-6xl px-6 py-10">
+      <header className="rounded-3xl border border-rose/20 bg-white/85 p-7">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">
+          Wild Rose Shop
+        </p>
+        <h1 className="mt-2 text-4xl text-forest">Shop by Category</h1>
+        <p className="mt-2 text-sm text-foreground/75">
+          Browse apparel, school spirit wear, seasonal pieces, and custom-ready products.
+        </p>
+      </header>
+
+      <section className="mt-5 flex flex-wrap gap-2">
+        <Link
+          href="/shop"
+          className={`filter-tab ${!category ? "filter-tab-active" : ""}`}
+        >
+          All Products
+        </Link>
+        {data.categoryNames.map((item) => (
+          <Link
+            key={item}
+            href={`/shop?category=${encodeURIComponent(item)}`}
+            className={`filter-tab ${category === item ? "filter-tab-active" : ""}`}
+          >
+            {item}
+          </Link>
+        ))}
+      </section>
+
+      <section className="mt-6 space-y-8">
+        {grouped.map((group) => (
+          <div key={group.categoryName} className="space-y-3">
+            <h2 className="text-2xl text-forest">{group.categoryName}</h2>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {group.items.map((product) => (
+                <article
+                  key={product.id}
+                  className="rounded-2xl border border-rose/20 bg-white/90 p-4 shadow-sm"
+                >
+                  <Image
+                    src={product.imageUrl}
+                    alt={product.title}
+                    width={400}
+                    height={400}
+                    className="h-48 w-full rounded-xl border border-rose/15 bg-surface object-contain p-4"
+                  />
+                  <h3 className="mt-3 text-lg text-forest">{product.title}</h3>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="text-lg font-bold text-rose">
+                      ${(product.effectivePriceCents / 100).toFixed(2)}
+                      {product.saleEnabled ? (
+                        <span className="ml-2 text-xs font-medium text-foreground/55 line-through">
+                          ${(product.basePriceCents / 100).toFixed(2)}
+                        </span>
+                      ) : null}
+                    </p>
+                    <Link
+                      href={`/shop/${product.slug}`}
+                      className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                    >
+                      View Item
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+      {products.length === 0 ? (
+        <p className="mt-6 rounded-2xl border border-rose/20 bg-white/90 px-4 py-6 text-sm text-foreground/75">
+          No products are available in this category yet.
+        </p>
+      ) : null}
+    </main>
+  );
+}

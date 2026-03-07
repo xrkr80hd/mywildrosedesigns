@@ -1,0 +1,80 @@
+import { NextResponse } from "next/server";
+import Stripe from "stripe";
+import { getStripeServerEnv } from "@/lib/env";
+import { getStripeServerClient } from "@/lib/stripe";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+
+export const runtime = "nodejs";
+
+async function markOrderPaid(session: Stripe.Checkout.Session) {
+  const orderId = session.metadata?.order_id;
+  if (!orderId) {
+    return;
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const updateResult = await supabase
+    .from("orders")
+    .update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      stripe_payment_intent_id:
+        typeof session.payment_intent === "string" ? session.payment_intent : null,
+    })
+    .eq("id", orderId);
+
+  if (updateResult.error) {
+    throw new Error(updateResult.error.message);
+  }
+}
+
+async function markOrderCancelled(session: Stripe.Checkout.Session) {
+  const orderId = session.metadata?.order_id;
+  if (!orderId) {
+    return;
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const updateResult = await supabase
+    .from("orders")
+    .update({
+      status: "cancelled",
+    })
+    .eq("id", orderId)
+    .eq("status", "pending_payment");
+
+  if (updateResult.error) {
+    throw new Error(updateResult.error.message);
+  }
+}
+
+export async function POST(request: Request) {
+  const signature = request.headers.get("stripe-signature");
+  if (!signature) {
+    return NextResponse.json({ error: "Missing Stripe signature." }, { status: 400 });
+  }
+
+  try {
+    const payload = await request.text();
+    const stripe = getStripeServerClient();
+    const { stripeWebhookSecret } = getStripeServerEnv();
+    const event = stripe.webhooks.constructEvent(
+      payload,
+      signature,
+      stripeWebhookSecret,
+    );
+
+    if (event.type === "checkout.session.completed") {
+      await markOrderPaid(event.data.object as Stripe.Checkout.Session);
+    }
+
+    if (event.type === "checkout.session.expired") {
+      await markOrderCancelled(event.data.object as Stripe.Checkout.Session);
+    }
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error("Stripe webhook error", error);
+    return NextResponse.json({ error: "Webhook handler failed." }, { status: 400 });
+  }
+}

@@ -1,0 +1,84 @@
+===========================================
+WILD ROSE DESIGN LLC - SETUP GUIDE
+===========================================
+
+🚀 QUICK SETUP (3 Steps):
+
+1. DATABASE SETUP
+   - Create MySQL database: wild_rose_db
+   - Update config/database.php with your credentials
+   
+2. RUN SETUP
+   - Visit: http://yoursite.com/setup.php
+   - This creates tables and default admin user
+   
+3. LOGIN & MANAGE
+   - Email: admin@wildrosedesign.com
+   - Password: admin123
+   - Change password immediately!
+
+===========================================
+PURE PHP STRUCTURE - NO HTML CONFUSION!
+===========================================
+
+✅ All pages are now .php files
+✅ Beautiful responsive design  
+✅ Modern animations & effects
+✅ Secure admin system
+✅ Complete ecommerce functionality
+✅ Custom upload system
+✅ Clean URLs (no .php in browser)
+
+===========================================
+FEATURES YOUR CUSTOMER CAN USE:
+===========================================
+
+📊 ADMIN DASHBOARD
+- View sales statistics
+- Monitor orders & inventory
+- Track custom requests
+
+📦 PRODUCT MANAGEMENT  
+- Add/edit/delete products
+- Manage categories & pricing
+- Update stock levels
+
+🛍️ ORDER MANAGEMENT
+- Process customer orders
+- Update order status
+- View customer details  
+
+🎨 CUSTOM UPLOADS
+- Review design requests
+- Provide quotes
+- Track project status
+
+===========================================
+CUSTOMER FEATURES:
+===========================================
+
+🛒 Shopping Experience
+- Browse by category
+- Add to cart
+- Secure checkout
+
+🎨 Custom Orders
+- Upload design files
+- Submit project details
+- Get quotes within 24hrs
+
+📱 Responsive Design
+- Perfect on desktop
+- Beautiful on mobile
+- Fast loading
+
+===========================================
+NEED HELP?
+===========================================
+
+1. Check the README.md for detailed docs
+2. Verify database connection in config/
+3. Ensure PHP 7.4+ and MySQL 5.7+
+4. Check file permissions for uploads/
+
+🌹 Wild Rose Design LLC - Ready to Bloom! 🌹

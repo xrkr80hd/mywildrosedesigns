@@ -1,0 +1,26 @@
+[
+  {
+    "id": "wr-tee-001",
+    "title": "Wild Rose Script Tee",
+    "category": "Apparel",
+    "price": 24.0,
+    "image": "assets/img/product-tee.svg",
+    "description": "Soft cotton tee with Wild Rose script \u2014 multiple colors."
+  },
+  {
+    "id": "wr-mug-002",
+    "title": "Seasonal Mug (Fall)",
+    "category": "Seasonal",
+    "price": 16.0,
+    "image": "assets/img/product-mug.svg",
+    "description": "Cozy ceramic mug for fall vibes \u2014 dishwasher safe."
+  },
+  {
+    "id": "wr-hood-003",
+    "title": "School Spirit Hoodie",
+    "category": "School",
+    "price": 38.0,
+    "image": "assets/img/product-hoodie.svg",
+    "description": "Customizable mascot and colors \u2014 add name/number."
+  }
+]
