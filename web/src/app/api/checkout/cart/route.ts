@@ -11,6 +11,11 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 
 const SHIPPING_CENTS = 599;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
 
 function getBaseUrlFromRequest(request: Request): string {
   const origin = request.headers.get("origin");
@@ -49,9 +54,24 @@ export async function POST(request: Request) {
     }
 
     const quantityById = new Map<string, number>();
+    const invalidItemIds: string[] = [];
     for (const item of parsed.data.items) {
+      if (!isUuid(item.id)) {
+        invalidItemIds.push(item.id);
+        continue;
+      }
       const next = (quantityById.get(item.id) ?? 0) + item.quantity;
       quantityById.set(item.id, Math.min(next, 100));
+    }
+
+    if (invalidItemIds.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Your cart contains outdated items. Please clear cart and add products again.",
+        },
+        { status: 400 },
+      );
     }
 
     const productIds = Array.from(quantityById.keys());
@@ -68,6 +88,15 @@ export async function POST(request: Request) {
       .eq("active", true);
 
     if (productResult.error) {
+      if ((productResult.error.message ?? "").toLowerCase().includes("invalid input syntax for type uuid")) {
+        return NextResponse.json(
+          {
+            error:
+              "Your cart contains outdated items. Please clear cart and add products again.",
+          },
+          { status: 400 },
+        );
+      }
       throw new Error(productResult.error.message);
     }
 

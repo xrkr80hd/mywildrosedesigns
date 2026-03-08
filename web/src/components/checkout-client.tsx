@@ -17,6 +17,7 @@ type CheckoutResponse = {
 
 const CART_KEY = "wild-rose-cart";
 const SHIPPING = 5.99;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function formatUsd(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -32,7 +33,24 @@ function loadItems(): CartItem[] {
 
   try {
     const raw = window.localStorage.getItem(CART_KEY);
-    return raw ? (JSON.parse(raw) as CartItem[]) : [];
+    const parsed = raw ? (JSON.parse(raw) as CartItem[]) : [];
+    const sanitized = parsed.filter(
+      (item) =>
+        typeof item.id === "string" &&
+        UUID_RE.test(item.id) &&
+        typeof item.title === "string" &&
+        typeof item.price === "number" &&
+        Number.isFinite(item.price) &&
+        item.price > 0 &&
+        Number.isInteger(item.quantity) &&
+        item.quantity > 0,
+    );
+
+    if (sanitized.length !== parsed.length) {
+      window.localStorage.setItem(CART_KEY, JSON.stringify(sanitized));
+    }
+
+    return sanitized;
   } catch {
     return [];
   }
