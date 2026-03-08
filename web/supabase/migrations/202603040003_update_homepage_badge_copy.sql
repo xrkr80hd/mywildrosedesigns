@@ -1,4 +1,4 @@
-﻿alter table public.homepage_settings
+alter table public.homepage_settings
   alter column hero_badge set default 'Handmade with care';
 
 update public.homepage_settings
