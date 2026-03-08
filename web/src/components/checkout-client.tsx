@@ -2,22 +2,14 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-
-type CartItem = {
-  id: string;
-  title: string;
-  price: number;
-  quantity: number;
-};
+import { CART_KEY, CartItem, formatVariantLabel, sanitizeCartItems } from "@/lib/cart";
 
 type CheckoutResponse = {
   url?: string;
   error?: string;
 };
 
-const CART_KEY = "wild-rose-cart";
 const SHIPPING = 5.99;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function formatUsd(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -33,20 +25,10 @@ function loadItems(): CartItem[] {
 
   try {
     const raw = window.localStorage.getItem(CART_KEY);
-    const parsed = raw ? (JSON.parse(raw) as CartItem[]) : [];
-    const sanitized = parsed.filter(
-      (item) =>
-        typeof item.id === "string" &&
-        UUID_RE.test(item.id) &&
-        typeof item.title === "string" &&
-        typeof item.price === "number" &&
-        Number.isFinite(item.price) &&
-        item.price > 0 &&
-        Number.isInteger(item.quantity) &&
-        item.quantity > 0,
-    );
+    const parsed = raw ? JSON.parse(raw) : [];
+    const sanitized = sanitizeCartItems(parsed);
 
-    if (sanitized.length !== parsed.length) {
+    if (Array.isArray(parsed) && sanitized.length !== parsed.length) {
       window.localStorage.setItem(CART_KEY, JSON.stringify(sanitized));
     }
 
@@ -74,15 +56,15 @@ export function CheckoutClient() {
 
   function updateQuantity(id: string, quantity: number) {
     if (quantity <= 0) {
-      save(items.filter((item) => item.id !== id));
+      save(items.filter((item) => item.lineId !== id));
       return;
     }
 
-    save(items.map((item) => (item.id === id ? { ...item, quantity } : item)));
+    save(items.map((item) => (item.lineId === id ? { ...item, quantity } : item)));
   }
 
   function removeItem(id: string) {
-    save(items.filter((item) => item.id !== id));
+    save(items.filter((item) => item.lineId !== id));
   }
 
   const subtotal = useMemo(
@@ -108,7 +90,13 @@ export function CheckoutClient() {
       customerEmail: String(formData.get("customerEmail") ?? ""),
       customerPhone: String(formData.get("customerPhone") ?? ""),
       notes: String(formData.get("notes") ?? ""),
-      items: items.map((item) => ({ id: item.id, quantity: item.quantity })),
+      items: items.map((item) => ({
+        id: item.id,
+        variantId: item.variantId,
+        variantSize: item.variantSize,
+        variantColor: item.variantColor,
+        quantity: item.quantity,
+      })),
     };
 
     try {
@@ -222,11 +210,14 @@ export function CheckoutClient() {
         <h2 className="text-2xl text-forest">Order Summary</h2>
         <div className="mt-4 space-y-3">
           {items.map((item) => (
-            <article key={item.id} className="rounded-xl border border-rose/20 bg-surface p-3">
+            <article key={item.lineId} className="rounded-xl border border-rose/20 bg-surface p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-forest">{item.title}</p>
                   <p className="text-xs text-foreground/70">{formatUsd(item.price)} each</p>
+                  {formatVariantLabel(item) ? (
+                    <p className="text-xs text-foreground/60">{formatVariantLabel(item)}</p>
+                  ) : null}
                 </div>
                 <p className="text-sm font-semibold text-rose">
                   {formatUsd(item.price * item.quantity)}
@@ -235,7 +226,7 @@ export function CheckoutClient() {
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                  onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
                   className="h-7 w-7 rounded-full border border-rose/30 bg-white text-xs font-semibold"
                 >
                   -
@@ -243,14 +234,14 @@ export function CheckoutClient() {
                 <span className="min-w-8 text-center text-sm font-semibold">{item.quantity}</span>
                 <button
                   type="button"
-                  onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                  onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
                   className="h-7 w-7 rounded-full border border-rose/30 bg-white text-xs font-semibold"
                 >
                   +
                 </button>
                 <button
                   type="button"
-                  onClick={() => removeItem(item.id)}
+                  onClick={() => removeItem(item.lineId)}
                   className="ml-auto rounded-lg border border-rose/30 px-2.5 py-1 text-xs font-semibold hover:bg-rose hover:text-white"
                 >
                   Remove

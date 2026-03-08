@@ -7,8 +7,20 @@ import {
 import { getEffectivePriceCents } from "@/lib/pricing";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
+export type StorefrontVariant = {
+  id: string;
+  sizeValue: string | null;
+  colorValue: string | null;
+  label: string;
+  sku: string | null;
+  basePriceCents: number;
+  effectivePriceCents: number;
+  stockOnHand: number;
+};
+
 export type StorefrontProduct = {
   id: string;
+  sku: string;
   title: string;
   description: string;
   slug: string;
@@ -27,6 +39,8 @@ export type StorefrontProduct = {
   productType: "apparel" | "accessory";
   sizeProfiles: string[];
   sizeValues: string[];
+  hasVariants: boolean;
+  variants: StorefrontVariant[];
 };
 
 export type HomepageSettings = {
@@ -111,6 +125,16 @@ function normalizeHeroBadge(value: string): string {
   return cleaned;
 }
 
+function isMissingTableError(error: unknown, tableName: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: string; message?: string; details?: string };
+  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return candidate.code === "42P01" || text.includes(tableName.toLowerCase());
+}
+
 export async function getStorefrontData() {
   try {
     const supabase = getSupabaseAdminClient();
@@ -150,7 +174,7 @@ export async function getStorefrontData() {
     const productQuery = supabase
       .from("products")
       .select(
-        "id, title, description, slug, category_id, price_cents, stock_on_hand, is_featured, is_hot, sale_enabled, sale_percent_off, sale_label, cart_cta_text, product_type, size_profiles, size_values, image_url",
+        "id, sku, title, description, slug, category_id, price_cents, stock_on_hand, is_featured, is_hot, sale_enabled, sale_percent_off, sale_label, cart_cta_text, product_type, size_profiles, size_values, image_url",
       )
       .eq("active", true)
       .order("is_featured", { ascending: false })
@@ -163,7 +187,7 @@ export async function getStorefrontData() {
       const legacyProductResult = await supabase
         .from("products")
         .select(
-          "id, title, description, slug, category_id, price_cents, stock_on_hand, is_featured, is_hot, sale_enabled, sale_percent_off, sale_label, cart_cta_text, image_url",
+          "id, sku, title, description, slug, category_id, price_cents, stock_on_hand, is_featured, is_hot, sale_enabled, sale_percent_off, sale_label, cart_cta_text, image_url",
         )
         .eq("active", true)
         .order("is_featured", { ascending: false })
@@ -181,28 +205,102 @@ export async function getStorefrontData() {
     const categoriesById = new Map(
       (categoryResult.data ?? []).map((category) => [category.id, category]),
     );
+    const productIds = productRows
+      .map((row) => String(row.id ?? ""))
+      .filter(Boolean);
+    const productRowsById = new Map(
+      productRows.map((row) => [String(row.id ?? ""), row]),
+    );
+    const variantsByProductId = new Map<string, StorefrontVariant[]>();
+
+    if (productIds.length > 0) {
+      const variantResult = await supabase
+        .from("product_variants")
+        .select(
+          "id, product_id, size_value, color_value, sku, price_override_cents, stock_on_hand, active",
+        )
+        .in("product_id", productIds)
+        .eq("active", true)
+        .order("created_at", { ascending: true });
+
+      if (variantResult.error) {
+        if (!isMissingTableError(variantResult.error, "product_variants")) {
+          throw new Error(variantResult.error.message);
+        }
+      } else {
+        for (const row of variantResult.data ?? []) {
+          const productId = String(row.product_id ?? "");
+          const parent = productRowsById.get(productId);
+          if (!parent) {
+            continue;
+          }
+
+          const parentBasePrice = Number(parent.price_cents ?? 0);
+          const variantBasePrice =
+            typeof row.price_override_cents === "number" && row.price_override_cents > 0
+              ? row.price_override_cents
+              : parentBasePrice;
+          const variantEffectivePrice = getEffectivePriceCents(
+            variantBasePrice,
+            Boolean(parent.sale_enabled),
+            Number(parent.sale_percent_off ?? 0),
+          );
+          const sizeValue = row.size_value ? String(row.size_value).trim() : null;
+          const colorValue = row.color_value ? String(row.color_value).trim() : null;
+          const label = [sizeValue, colorValue].filter(Boolean).join(" • ");
+
+          const normalizedVariant: StorefrontVariant = {
+            id: String(row.id ?? ""),
+            sizeValue,
+            colorValue,
+            label,
+            sku: row.sku ? String(row.sku) : null,
+            basePriceCents: variantBasePrice,
+            effectivePriceCents: variantEffectivePrice,
+            stockOnHand: Number(row.stock_on_hand ?? 0),
+          };
+
+          const existing = variantsByProductId.get(productId) ?? [];
+          existing.push(normalizedVariant);
+          variantsByProductId.set(productId, existing);
+        }
+      }
+    }
 
     const products: StorefrontProduct[] = productRows.map((product) => {
       const categoryId = String(product.category_id ?? "");
+      const productId = String(product.id ?? "");
       const category = categoriesById.get(categoryId);
+      const variants = variantsByProductId.get(productId) ?? [];
+      const hasVariants = variants.length > 0;
       const basePriceCents = Number(product.price_cents ?? 0);
-      const effectivePriceCents = getEffectivePriceCents(
+      const productEffectivePriceCents = getEffectivePriceCents(
         basePriceCents,
         Boolean(product.sale_enabled),
         Number(product.sale_percent_off ?? 0),
       );
+      const effectivePriceCents = hasVariants
+        ? Math.min(...variants.map((variant) => variant.effectivePriceCents))
+        : productEffectivePriceCents;
+      const displayBasePriceCents = hasVariants
+        ? Math.min(...variants.map((variant) => variant.basePriceCents))
+        : basePriceCents;
+      const stockOnHand = hasVariants
+        ? variants.reduce((sum, variant) => sum + variant.stockOnHand, 0)
+        : Number(product.stock_on_hand ?? 0);
 
       return {
-        id: String(product.id ?? ""),
+        id: productId,
+        sku: String(product.sku ?? ""),
         title: String(product.title ?? ""),
         description: String(product.description ?? ""),
         slug: String(product.slug ?? ""),
         categoryName: category?.name ?? "Uncategorized",
         categorySlug: category?.slug ?? "uncategorized",
         imageUrl: String(product.image_url ?? "/assets/img/product-tee.svg"),
-        basePriceCents,
+        basePriceCents: displayBasePriceCents,
         effectivePriceCents,
-        stockOnHand: Number(product.stock_on_hand ?? 0),
+        stockOnHand,
         isFeatured: Boolean(product.is_featured),
         isHot: Boolean(product.is_hot),
         saleEnabled: Boolean(product.sale_enabled),
@@ -216,6 +314,8 @@ export async function getStorefrontData() {
         sizeValues: Array.isArray(product.size_values)
           ? (product.size_values as string[])
           : [...DEFAULT_APPAREL_SIZES],
+        hasVariants,
+        variants,
       };
     });
 

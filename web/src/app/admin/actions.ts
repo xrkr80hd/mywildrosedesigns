@@ -135,6 +135,40 @@ const deleteCategorySchema = z.object({
   categoryId: z.string().uuid(),
 });
 
+const optionalPriceOverrideSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    const text = String(value).trim();
+    if (!text) {
+      return undefined;
+    }
+
+    return Number(text);
+  },
+  z.number().int().min(1).max(1_000_000).optional(),
+);
+
+const createProductVariantSchema = z.object({
+  productId: z.string().uuid(),
+  sizeValue: z.string().trim().max(40).optional(),
+  colorValue: z.string().trim().max(60).optional(),
+  sku: z.string().trim().max(80).optional(),
+  priceOverrideCents: optionalPriceOverrideSchema,
+  stockOnHand: z.coerce.number().int().min(0).max(1_000_000),
+  active: z.boolean(),
+});
+
+const updateProductVariantSchema = createProductVariantSchema.extend({
+  variantId: z.string().uuid(),
+});
+
+const deleteProductVariantSchema = z.object({
+  variantId: z.string().uuid(),
+});
+
 const popupSchema = z.object({
   enabled: z.boolean(),
   showCta: z.boolean(),
@@ -219,6 +253,15 @@ function normalizeSku(value: string): string {
   return cleaned || "WR";
 }
 
+function normalizeOptionalSku(value?: string): string | null {
+  const text = (value ?? "").trim();
+  if (!text) {
+    return null;
+  }
+
+  return normalizeSku(text);
+}
+
 function categoryCodeFromSlug(slug: string): string {
   const parts = slug
     .toUpperCase()
@@ -285,6 +328,16 @@ function isSlugConflict(error: unknown): boolean {
   return (candidate.details ?? "").includes("slug");
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: string; message?: string; details?: string };
+  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return candidate.code === "23505" || text.includes("duplicate key value");
+}
+
 function isPopupColumnMismatch(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -297,6 +350,17 @@ function isPopupColumnMismatch(error: unknown): boolean {
     text.includes("show_cta") ||
     text.includes("cta_href")
   );
+}
+
+function isMissingTableError(error: unknown, tableName: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: string; message?: string; details?: string };
+  const haystack = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return candidate.code === "42P01" ||
+    (haystack.includes(tableName.toLowerCase()) && haystack.includes("does not exist"));
 }
 
 function isMissingColumnError(error: unknown, columnName: string): boolean {
@@ -959,6 +1023,140 @@ export async function deleteProductCard(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/admin/inventory");
   return redirectAdminSuccess("product_deleted", redirectTo);
+}
+
+export async function createProductVariant(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = createProductVariantSchema.safeParse({
+    productId: formData.get("productId"),
+    sizeValue: formData.get("sizeValue") || undefined,
+    colorValue: formData.get("colorValue") || undefined,
+    sku: formData.get("sku") || undefined,
+    priceOverrideCents: formData.get("priceOverrideCents") || undefined,
+    stockOnHand: formData.get("stockOnHand"),
+    active: asBool(formData, "active"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const sizeValue = nullableText(formData.get("sizeValue"));
+  const colorValue = nullableText(formData.get("colorValue"));
+  if (!sizeValue && !colorValue) {
+    return redirectAdminError("variant_requires_option", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const insertResult = await supabase.from("product_variants").insert({
+    product_id: parsed.data.productId,
+    size_value: sizeValue,
+    color_value: colorValue,
+    sku: normalizeOptionalSku(parsed.data.sku),
+    price_override_cents: parsed.data.priceOverrideCents ?? null,
+    stock_on_hand: parsed.data.stockOnHand,
+    active: parsed.data.active,
+  });
+
+  if (insertResult.error) {
+    if (isMissingTableError(insertResult.error, "product_variants")) {
+      return redirectAdminError("variant_table_missing", redirectTo);
+    }
+    if (isUniqueViolation(insertResult.error)) {
+      return redirectAdminError("variant_conflict", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/shop");
+  revalidatePath("/admin");
+  revalidatePath("/admin/inventory");
+  return redirectAdminSuccess("variant_created", redirectTo);
+}
+
+export async function updateProductVariant(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = updateProductVariantSchema.safeParse({
+    variantId: formData.get("variantId"),
+    productId: formData.get("productId"),
+    sizeValue: formData.get("sizeValue") || undefined,
+    colorValue: formData.get("colorValue") || undefined,
+    sku: formData.get("sku") || undefined,
+    priceOverrideCents: formData.get("priceOverrideCents") || undefined,
+    stockOnHand: formData.get("stockOnHand"),
+    active: asBool(formData, "active"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const sizeValue = nullableText(formData.get("sizeValue"));
+  const colorValue = nullableText(formData.get("colorValue"));
+  if (!sizeValue && !colorValue) {
+    return redirectAdminError("variant_requires_option", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const updateResult = await supabase
+    .from("product_variants")
+    .update({
+      size_value: sizeValue,
+      color_value: colorValue,
+      sku: normalizeOptionalSku(parsed.data.sku),
+      price_override_cents: parsed.data.priceOverrideCents ?? null,
+      stock_on_hand: parsed.data.stockOnHand,
+      active: parsed.data.active,
+    })
+    .eq("id", parsed.data.variantId)
+    .eq("product_id", parsed.data.productId);
+
+  if (updateResult.error) {
+    if (isMissingTableError(updateResult.error, "product_variants")) {
+      return redirectAdminError("variant_table_missing", redirectTo);
+    }
+    if (isUniqueViolation(updateResult.error)) {
+      return redirectAdminError("variant_conflict", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/shop");
+  revalidatePath("/admin");
+  revalidatePath("/admin/inventory");
+  return redirectAdminSuccess("variant_updated", redirectTo);
+}
+
+export async function deleteProductVariant(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = deleteProductVariantSchema.safeParse({
+    variantId: formData.get("variantId"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const deleteResult = await supabase
+    .from("product_variants")
+    .delete()
+    .eq("id", parsed.data.variantId);
+
+  if (deleteResult.error) {
+    if (isMissingTableError(deleteResult.error, "product_variants")) {
+      return redirectAdminError("variant_table_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/shop");
+  revalidatePath("/admin");
+  revalidatePath("/admin/inventory");
+  return redirectAdminSuccess("variant_deleted", redirectTo);
 }
 
 export async function createWelcomePost(formData: FormData) {

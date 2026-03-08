@@ -2,17 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { CART_KEY, CartItem, formatVariantLabel, sanitizeCartItems } from "@/lib/cart";
 
-type CartItem = {
-  id: string;
-  title: string;
-  price: number;
-  quantity: number;
-};
-
-const CART_KEY = "wild-rose-cart";
 const SHIPPING = 5.99;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function formatUsd(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -28,20 +20,10 @@ function loadItems(): CartItem[] {
 
   try {
     const raw = window.localStorage.getItem(CART_KEY);
-    const parsed = raw ? (JSON.parse(raw) as CartItem[]) : [];
-    const sanitized = parsed.filter(
-      (item) =>
-        typeof item.id === "string" &&
-        UUID_RE.test(item.id) &&
-        typeof item.title === "string" &&
-        typeof item.price === "number" &&
-        Number.isFinite(item.price) &&
-        item.price > 0 &&
-        Number.isInteger(item.quantity) &&
-        item.quantity > 0,
-    );
+    const parsed = raw ? JSON.parse(raw) : [];
+    const sanitized = sanitizeCartItems(parsed);
 
-    if (sanitized.length !== parsed.length) {
+    if (Array.isArray(parsed) && sanitized.length !== parsed.length) {
       window.localStorage.setItem(CART_KEY, JSON.stringify(sanitized));
     }
 
@@ -61,15 +43,15 @@ export function CartClient() {
 
   function updateQuantity(id: string, quantity: number) {
     if (quantity <= 0) {
-      save(items.filter((item) => item.id !== id));
+      save(items.filter((item) => item.lineId !== id));
       return;
     }
 
-    save(items.map((item) => (item.id === id ? { ...item, quantity } : item)));
+    save(items.map((item) => (item.lineId === id ? { ...item, quantity } : item)));
   }
 
   function removeItem(id: string) {
-    save(items.filter((item) => item.id !== id));
+    save(items.filter((item) => item.lineId !== id));
   }
 
   function clearCart() {
@@ -104,13 +86,16 @@ export function CartClient() {
       <section className="space-y-3">
         {items.map((item) => (
           <article
-            key={item.id}
+            key={item.lineId}
             className="rounded-2xl border border-rose/20 bg-white/90 p-4"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg text-forest">{item.title}</h3>
                 <p className="text-sm text-foreground/70">{formatUsd(item.price)} each</p>
+                {formatVariantLabel(item) ? (
+                  <p className="text-xs text-foreground/60">{formatVariantLabel(item)}</p>
+                ) : null}
               </div>
               <p className="text-sm font-semibold text-rose">
                 {formatUsd(item.price * item.quantity)}
@@ -118,26 +103,26 @@ export function CartClient() {
             </div>
 
             <div className="mt-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                className="h-8 w-8 rounded-full border border-rose/30 bg-white text-sm font-semibold"
-              >
+                <button
+                  type="button"
+                  onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
+                  className="h-8 w-8 rounded-full border border-rose/30 bg-white text-sm font-semibold"
+                >
                 -
               </button>
               <span className="min-w-8 text-center text-sm font-semibold">{item.quantity}</span>
-              <button
-                type="button"
-                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                className="h-8 w-8 rounded-full border border-rose/30 bg-white text-sm font-semibold"
-              >
+                <button
+                  type="button"
+                  onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
+                  className="h-8 w-8 rounded-full border border-rose/30 bg-white text-sm font-semibold"
+                >
                 +
               </button>
-              <button
-                type="button"
-                onClick={() => removeItem(item.id)}
-                className="ml-auto rounded-lg border border-rose/30 px-3 py-1.5 text-xs font-semibold hover:bg-rose hover:text-white"
-              >
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.lineId)}
+                  className="ml-auto rounded-lg border border-rose/30 px-3 py-1.5 text-xs font-semibold hover:bg-rose hover:text-white"
+                >
                 Remove
               </button>
             </div>

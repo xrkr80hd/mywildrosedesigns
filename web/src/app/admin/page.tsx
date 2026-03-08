@@ -12,9 +12,11 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   createCategory,
   createProduct,
+  createProductVariant,
   createWelcomePost,
   deleteCategory,
   deleteProductCard,
+  deleteProductVariant,
   deleteWelcomePost,
   saveHomepageSettings,
   saveUploadTransferPricing,
@@ -23,6 +25,7 @@ import {
   updateContactMessage,
   updateOrderStatus,
   updateProductCard,
+  updateProductVariant,
   updateWelcomePost,
 } from "./actions";
 
@@ -70,6 +73,17 @@ type ProductRow = {
   sale_percent_off: number;
   sale_label: string;
   cart_cta_text: string;
+  active: boolean;
+};
+
+type ProductVariantRow = {
+  id: string;
+  product_id: string;
+  size_value: string | null;
+  color_value: string | null;
+  sku: string | null;
+  price_override_cents: number | null;
+  stock_on_hand: number;
   active: boolean;
 };
 
@@ -139,6 +153,11 @@ type BestSellerRow = {
   orderCount: number;
 };
 
+type FunnelEventRow = {
+  event_type: "view_product" | "add_to_cart" | "start_checkout" | "paid";
+  created_at: string;
+};
+
 const DEFAULT_HOMEPAGE: HomepageRow = {
   hero_badge: "Custom Prints • Fast Turnaround",
   hero_title: "Wild Rose Design LLC",
@@ -199,6 +218,21 @@ function formatDateTime(value: string | null) {
   }
 
   return new Date(value).toLocaleString();
+}
+
+function isMissingTableError(error: unknown, tableName: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: string; message?: string; details?: string };
+  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return candidate.code === "42P01" || text.includes(tableName.toLowerCase());
+}
+
+function formatVariantLabel(variant: ProductVariantRow): string {
+  const parts = [variant.size_value, variant.color_value].filter(Boolean);
+  return parts.join(" • ") || "Default option";
 }
 
 async function getOrders(): Promise<OrderWithFileLink[]> {
@@ -279,6 +313,73 @@ async function getSaleMovements() {
     .limit(4000);
 
   return (result.data ?? []) as InventoryMovementRow[];
+}
+
+async function getProductVariants() {
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase
+    .from("product_variants")
+    .select(
+      "id, product_id, size_value, color_value, sku, price_override_cents, stock_on_hand, active",
+    )
+    .order("created_at", { ascending: true });
+
+  if (result.error) {
+    if (isMissingTableError(result.error, "product_variants")) {
+      return [];
+    }
+    return [];
+  }
+
+  return (result.data ?? []) as ProductVariantRow[];
+}
+
+async function getFunnelEvents() {
+  const supabase = getSupabaseAdminClient();
+  const thirtyDaysAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString();
+  const result = await supabase
+    .from("funnel_events")
+    .select("event_type, created_at")
+    .gte("created_at", thirtyDaysAgo)
+    .limit(20000);
+
+  if (result.error) {
+    if (isMissingTableError(result.error, "funnel_events")) {
+      return [];
+    }
+    return [];
+  }
+
+  return (result.data ?? []) as FunnelEventRow[];
+}
+
+function buildFunnelSummary(events: FunnelEventRow[]) {
+  const counts = {
+    view_product: 0,
+    add_to_cart: 0,
+    start_checkout: 0,
+    paid: 0,
+  };
+
+  for (const event of events) {
+    if (event.event_type in counts) {
+      counts[event.event_type] += 1;
+    }
+  }
+
+  function rate(numerator: number, denominator: number): string {
+    if (denominator <= 0) {
+      return "0.0%";
+    }
+    return `${((numerator / denominator) * 100).toFixed(1)}%`;
+  }
+
+  return {
+    counts,
+    addRate: rate(counts.add_to_cart, counts.view_product),
+    checkoutRate: rate(counts.start_checkout, counts.add_to_cart),
+    paidRate: rate(counts.paid, counts.start_checkout),
+  };
 }
 
 function buildBestSellerRows(
@@ -433,23 +534,27 @@ export default async function AdminPage() {
     orders,
     categories,
     products,
+    productVariants,
     homepage,
     popup,
     welcomePosts,
     messages,
     uploadOptions,
     saleMovements,
+    funnelEvents,
   ] =
     await Promise.all([
       getOrders(),
       getCategories(),
       getProducts(),
+      getProductVariants(),
       getHomepageSettings(),
       getPopup(),
       getWelcomePosts(),
       getContactMessages(),
       getUploadProductOptionsForAdmin(),
       getSaleMovements(),
+      getFunnelEvents(),
     ]);
 
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
@@ -476,6 +581,13 @@ export default async function AdminPage() {
   const newOrderCount = orders.filter((order) => actionableOrderStatuses.has(order.status)).length;
   const latestOrderId = orders.find((order) => actionableOrderStatuses.has(order.status))?.id ?? null;
   const bestSellerRows = buildBestSellerRows(products, saleMovements);
+  const funnelSummary = buildFunnelSummary(funnelEvents);
+  const variantsByProductId = new Map<string, ProductVariantRow[]>();
+  for (const variant of productVariants) {
+    const existing = variantsByProductId.get(variant.product_id) ?? [];
+    existing.push(variant);
+    variantsByProductId.set(variant.product_id, existing);
+  }
 
   return (
     <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-6 py-10">
@@ -778,6 +890,39 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        title="Funnel Analytics (Last 30 Days)"
+        description="Basic storefront funnel counts for product views, add-to-cart, checkout starts, and paid orders."
+      >
+        <div className="grid gap-3 md:grid-cols-4">
+          <article className="rounded-2xl border border-rose/20 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">View Product</p>
+            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.view_product}</p>
+          </article>
+          <article className="rounded-2xl border border-rose/20 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Add to Cart</p>
+            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.add_to_cart}</p>
+            <p className="mt-1 text-xs text-foreground/70">
+              {funnelSummary.addRate} from views
+            </p>
+          </article>
+          <article className="rounded-2xl border border-rose/20 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Start Checkout</p>
+            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.start_checkout}</p>
+            <p className="mt-1 text-xs text-foreground/70">
+              {funnelSummary.checkoutRate} from add-to-cart
+            </p>
+          </article>
+          <article className="rounded-2xl border border-rose/20 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Paid</p>
+            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.paid}</p>
+            <p className="mt-1 text-xs text-foreground/70">
+              {funnelSummary.paidRate} from checkout starts
+            </p>
+          </article>
+        </div>
+      </AdminDropdownSection>
+
+      <AdminDropdownSection
         title="Categories"
         description="Keep this compact by editing categories in dropdown rows."
       >
@@ -903,66 +1048,172 @@ export default async function AdminPage() {
                 </p>
               ) : (
                 <div className="mt-3 space-y-2">
-                  {group.items.map((product) => (
-                    <details key={product.id} className="rounded-xl border border-rose/20 bg-white p-3">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-forest">{product.title}</p>
-                          <p className="text-xs text-foreground/70">
-                            {formatUsd(product.price_cents)} | Stock {product.stock_on_hand}
+                  {group.items.map((product) => {
+                    const productVariantsForProduct = variantsByProductId.get(product.id) ?? [];
+
+                    return (
+                      <details key={product.id} className="rounded-xl border border-rose/20 bg-white p-3">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-forest">{product.title}</p>
+                            <p className="text-xs text-foreground/70">
+                              {formatUsd(product.price_cents)} | Stock {product.stock_on_hand}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-1 text-[11px] font-semibold">
+                            <span className={`rounded-full px-2 py-0.5 ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                              {product.active ? "Active" : "Hidden"}
+                            </span>
+                            {product.is_featured ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Featured</span> : null}
+                            {product.is_hot ? <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700">Hot</span> : null}
+                          </div>
+                        </summary>
+
+                        <form action={updateProductCard} className="mt-3 grid gap-3 md:grid-cols-2">
+                          <input type="hidden" name="productId" value={product.id} />
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span><input name="title" defaultValue={product.title} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Category</span><select name="categoryId" defaultValue={product.category_id} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm">{categories.map((category) => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></label>
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">SKU</span><input name="sku" defaultValue={product.sku} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Slug</span><input name="slug" defaultValue={product.slug} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span><textarea name="description" rows={2} defaultValue={product.description} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <AdminImageUploadField
+                            name="imageUrl"
+                            defaultValue={product.image_url ?? ""}
+                            className="md:col-span-2"
+                            recommendedSize="1200 x 1200 px"
+                            helperText="Drop a replacement image here or upload one, then save this card."
+                          />
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span><input name="priceCents" type="number" defaultValue={product.price_cents} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Stock</span><input name="stockOnHand" type="number" defaultValue={product.stock_on_hand} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Percent Off</span><input name="salePercentOff" type="number" min={0} max={90} defaultValue={product.sale_percent_off} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Label</span><input name="saleLabel" defaultValue={product.sale_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Cart Button Text</span><input name="cartCtaText" defaultValue={product.cart_cta_text} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <div className="flex flex-wrap gap-4 md:col-span-2">
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" defaultChecked={product.is_featured} /> Featured</label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isHot" defaultChecked={product.is_hot} /> Hot Item</label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="saleEnabled" defaultChecked={product.sale_enabled} /> Sale On</label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="active" defaultChecked={product.active} /> Active</label>
+                          </div>
+                          <div className="md:col-span-2 flex items-center justify-between">
+                            <p className="text-xs text-foreground/70">Price preview: <span className="font-semibold text-forest">{formatUsd(product.price_cents)}</span></p>
+                            <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Save Product</button>
+                          </div>
+                        </form>
+
+                        <div className="mt-3 rounded-xl border border-rose/20 bg-surface/60 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                            Variant Inventory (Size/Color)
                           </p>
-                        </div>
-                        <div className="flex flex-wrap gap-1 text-[11px] font-semibold">
-                          <span className={`rounded-full px-2 py-0.5 ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
-                            {product.active ? "Active" : "Hidden"}
-                          </span>
-                          {product.is_featured ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Featured</span> : null}
-                          {product.is_hot ? <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700">Hot</span> : null}
-                        </div>
-                      </summary>
+                          <p className="mt-1 text-xs text-foreground/75">
+                            Add and maintain stock by size/color here. If variants exist, checkout uses variant stock.
+                          </p>
 
-                      <form action={updateProductCard} className="mt-3 grid gap-3 md:grid-cols-2">
-                        <input type="hidden" name="productId" value={product.id} />
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span><input name="title" defaultValue={product.title} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Category</span><select name="categoryId" defaultValue={product.category_id} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm">{categories.map((category) => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></label>
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">SKU</span><input name="sku" defaultValue={product.sku} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Slug</span><input name="slug" defaultValue={product.slug} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span><textarea name="description" rows={2} defaultValue={product.description} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <AdminImageUploadField
-                          name="imageUrl"
-                          defaultValue={product.image_url ?? ""}
-                          className="md:col-span-2"
-                          recommendedSize="1200 x 1200 px"
-                          helperText="Drop a replacement image here or upload one, then save this card."
-                        />
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span><input name="priceCents" type="number" defaultValue={product.price_cents} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Stock</span><input name="stockOnHand" type="number" defaultValue={product.stock_on_hand} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Percent Off</span><input name="salePercentOff" type="number" min={0} max={90} defaultValue={product.sale_percent_off} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Label</span><input name="saleLabel" defaultValue={product.sale_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Cart Button Text</span><input name="cartCtaText" defaultValue={product.cart_cta_text} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                        <div className="flex flex-wrap gap-4 md:col-span-2">
-                          <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" defaultChecked={product.is_featured} /> Featured</label>
-                          <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isHot" defaultChecked={product.is_hot} /> Hot Item</label>
-                          <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="saleEnabled" defaultChecked={product.sale_enabled} /> Sale On</label>
-                          <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="active" defaultChecked={product.active} /> Active</label>
-                        </div>
-                        <div className="md:col-span-2 flex items-center justify-between">
-                          <p className="text-xs text-foreground/70">Price preview: <span className="font-semibold text-forest">{formatUsd(product.price_cents)}</span></p>
-                          <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Save Product</button>
-                        </div>
-                      </form>
+                          <form action={createProductVariant} className="mt-3 grid gap-2 md:grid-cols-3">
+                            <input type="hidden" name="productId" value={product.id} />
+                            <input type="hidden" name="redirectTo" value="/admin" />
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Size</span>
+                              <input name="sizeValue" placeholder="S, M, L" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Color</span>
+                              <input name="colorValue" placeholder="Black, Red" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Variant SKU</span>
+                              <input name="sku" placeholder="WR-TSHIRT-BLK-M" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (cents)</span>
+                              <input name="priceOverrideCents" type="number" min={1} placeholder="Optional" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Stock</span>
+                              <input name="stockOnHand" type="number" min={0} defaultValue={0} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                            </label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+                              <input type="checkbox" name="active" defaultChecked />
+                              Active
+                            </label>
+                            <div className="md:col-span-3">
+                              <button type="submit" className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white">
+                                Add Variant
+                              </button>
+                            </div>
+                          </form>
 
-                      <form action={deleteProductCard} className="mt-2 flex justify-end">
-                        <input type="hidden" name="productId" value={product.id} />
-                        <input type="hidden" name="redirectTo" value="/admin" />
-                        <AdminConfirmSubmitButton
-                          buttonLabel="Delete Product"
-                          confirmMessage="Are you sure you'd like to delete this item?"
-                          idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
-                        />
-                      </form>
-                    </details>
-                  ))}
+                          {productVariantsForProduct.length === 0 ? (
+                            <p className="mt-3 rounded-xl border border-dashed border-rose/30 bg-white/80 px-3 py-2 text-xs text-foreground/75">
+                              No variants yet for this product.
+                            </p>
+                          ) : (
+                            <div className="mt-3 space-y-2">
+                              {productVariantsForProduct.map((variant) => (
+                                <article key={variant.id} className="rounded-xl border border-rose/15 bg-white p-3">
+                                  <p className="text-xs font-semibold text-forest">
+                                    {formatVariantLabel(variant)}
+                                  </p>
+                                  <form action={updateProductVariant} className="mt-2 grid gap-2 md:grid-cols-3">
+                                    <input type="hidden" name="variantId" value={variant.id} />
+                                    <input type="hidden" name="productId" value={product.id} />
+                                    <input type="hidden" name="redirectTo" value="/admin" />
+                                    <label className="space-y-1">
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Size</span>
+                                      <input name="sizeValue" defaultValue={variant.size_value ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                    </label>
+                                    <label className="space-y-1">
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Color</span>
+                                      <input name="colorValue" defaultValue={variant.color_value ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                    </label>
+                                    <label className="space-y-1">
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Variant SKU</span>
+                                      <input name="sku" defaultValue={variant.sku ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                    </label>
+                                    <label className="space-y-1">
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (cents)</span>
+                                      <input name="priceOverrideCents" type="number" min={1} defaultValue={variant.price_override_cents ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                    </label>
+                                    <label className="space-y-1">
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Stock</span>
+                                      <input name="stockOnHand" type="number" min={0} defaultValue={variant.stock_on_hand} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                    </label>
+                                    <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+                                      <input type="checkbox" name="active" defaultChecked={variant.active} />
+                                      Active
+                                    </label>
+                                    <div className="md:col-span-3">
+                                      <button type="submit" className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white">
+                                        Save Variant
+                                      </button>
+                                    </div>
+                                  </form>
+                                  <form action={deleteProductVariant} className="mt-2">
+                                    <input type="hidden" name="variantId" value={variant.id} />
+                                    <input type="hidden" name="redirectTo" value="/admin" />
+                                    <AdminConfirmSubmitButton
+                                      buttonLabel="Delete Variant"
+                                      confirmMessage="Are you sure you'd like to delete this variant?"
+                                      idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                    />
+                                  </form>
+                                </article>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <form action={deleteProductCard} className="mt-2 flex justify-end">
+                          <input type="hidden" name="productId" value={product.id} />
+                          <input type="hidden" name="redirectTo" value="/admin" />
+                          <AdminConfirmSubmitButton
+                            buttonLabel="Delete Product"
+                            confirmMessage="Are you sure you'd like to delete this item?"
+                            idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                          />
+                        </form>
+                      </details>
+                    );
+                  })}
                 </div>
               )}
             </details>

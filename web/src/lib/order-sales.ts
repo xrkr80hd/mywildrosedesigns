@@ -13,6 +13,7 @@ type OrderSnapshot = {
 
 type ParsedCartItem = {
   productId: string;
+  variantId: string | null;
   quantity: number;
 };
 
@@ -52,7 +53,7 @@ function parseCartItemsFromNotes(notes: string | null): ParsedCartItem[] {
     return [];
   }
 
-  const quantityByProductId = new Map<string, number>();
+  const quantityByLineKey = new Map<string, ParsedCartItem>();
   for (const entry of parsed) {
     if (!entry || typeof entry !== "object") {
       continue;
@@ -69,19 +70,31 @@ function parseCartItemsFromNotes(notes: string | null): ParsedCartItem[] {
       continue;
     }
 
+    const variantIdCandidate =
+      typeof (entry as { variantId?: unknown }).variantId === "string"
+        ? (entry as { variantId: string }).variantId
+        : "";
+    const variantId = UUID_RE.test(variantIdCandidate) ? variantIdCandidate : null;
+
     const quantity = Number((entry as { quantity?: unknown }).quantity);
     if (!Number.isInteger(quantity) || quantity <= 0) {
       continue;
     }
 
-    const next = (quantityByProductId.get(candidateId) ?? 0) + quantity;
-    quantityByProductId.set(candidateId, Math.min(next, 1000));
+    const lineKey = variantId ? `${candidateId}::${variantId}` : candidateId;
+    const existing = quantityByLineKey.get(lineKey);
+    if (existing) {
+      existing.quantity = Math.min(existing.quantity + quantity, 1000);
+    } else {
+      quantityByLineKey.set(lineKey, {
+        productId: candidateId,
+        variantId,
+        quantity: Math.min(quantity, 1000),
+      });
+    }
   }
 
-  return Array.from(quantityByProductId, ([productId, quantity]) => ({
-    productId,
-    quantity,
-  }));
+  return Array.from(quantityByLineKey.values());
 }
 
 async function getOrderSnapshot(orderId: string): Promise<OrderSnapshot | null> {
@@ -119,7 +132,7 @@ export async function recordSaleMovementsForOrder(
     .select("id")
     .eq("reference_order_id", order.id)
     .eq("movement_type", "sale")
-    .limit(1);
+    .limit(200);
 
   if (existingResult.error) {
     throw new Error(existingResult.error.message);
@@ -131,6 +144,7 @@ export async function recordSaleMovementsForOrder(
 
   const movementRows = saleItems.map((item) => ({
     product_id: item.productId,
+    variant_id: item.variantId,
     movement_type: "sale" as const,
     quantity_delta: -item.quantity,
     reason: "Sale captured from checkout payment",

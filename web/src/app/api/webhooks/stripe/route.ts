@@ -5,6 +5,7 @@ import {
   hasStripeSecretKey,
   hasStripeWebhookSecret,
 } from "@/lib/env";
+import { recordFunnelEvent } from "@/lib/funnel-analytics";
 import { recordSaleMovementsForOrder } from "@/lib/order-sales";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -47,6 +48,19 @@ async function markOrderPaid(session: Stripe.Checkout.Session) {
   }
 
   await recordSaleMovementsForOrder(orderId, "stripe_webhook");
+
+  try {
+    await recordFunnelEvent({
+      eventType: "paid",
+      sourcePath: "/api/webhooks/stripe",
+      orderId,
+      metadata: {
+        checkoutType: session.metadata?.checkout_type ?? null,
+      },
+    });
+  } catch (analyticsError) {
+    console.error("Unable to record paid analytics event", analyticsError);
+  }
 }
 
 async function markOrderCancelled(session: Stripe.Checkout.Session) {

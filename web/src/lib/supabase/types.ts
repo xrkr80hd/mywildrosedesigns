@@ -178,11 +178,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      product_variants: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          product_id: string;
+          size_value: string | null;
+          color_value: string | null;
+          sku: string | null;
+          price_override_cents: number | null;
+          stock_on_hand: number;
+          active: boolean;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          product_id: string;
+          size_value?: string | null;
+          color_value?: string | null;
+          sku?: string | null;
+          price_override_cents?: number | null;
+          stock_on_hand?: number;
+          active?: boolean;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          product_id?: string;
+          size_value?: string | null;
+          color_value?: string | null;
+          sku?: string | null;
+          price_override_cents?: number | null;
+          stock_on_hand?: number;
+          active?: boolean;
+        };
+        Relationships: [];
+      };
       inventory_movements: {
         Row: {
           id: number;
           created_at: string;
           product_id: string;
+          variant_id: string | null;
           movement_type: InventoryMovementType;
           quantity_delta: number;
           reason: string | null;
@@ -193,6 +233,7 @@ export type Database = {
           id?: number;
           created_at?: string;
           product_id: string;
+          variant_id?: string | null;
           movement_type: InventoryMovementType;
           quantity_delta: number;
           reason?: string | null;
@@ -203,11 +244,54 @@ export type Database = {
           id?: number;
           created_at?: string;
           product_id?: string;
+          variant_id?: string | null;
           movement_type?: InventoryMovementType;
           quantity_delta?: number;
           reason?: string | null;
           reference_order_id?: string | null;
           created_by?: string | null;
+        };
+        Relationships: [];
+      };
+      funnel_events: {
+        Row: {
+          id: number;
+          created_at: string;
+          event_type: "view_product" | "add_to_cart" | "start_checkout" | "paid";
+          session_id: string | null;
+          source_path: string | null;
+          product_id: string | null;
+          product_slug: string | null;
+          variant_id: string | null;
+          order_id: string | null;
+          cart_size: number | null;
+          metadata: Json;
+        };
+        Insert: {
+          id?: number;
+          created_at?: string;
+          event_type: "view_product" | "add_to_cart" | "start_checkout" | "paid";
+          session_id?: string | null;
+          source_path?: string | null;
+          product_id?: string | null;
+          product_slug?: string | null;
+          variant_id?: string | null;
+          order_id?: string | null;
+          cart_size?: number | null;
+          metadata?: Json;
+        };
+        Update: {
+          id?: number;
+          created_at?: string;
+          event_type?: "view_product" | "add_to_cart" | "start_checkout" | "paid";
+          session_id?: string | null;
+          source_path?: string | null;
+          product_id?: string | null;
+          product_slug?: string | null;
+          variant_id?: string | null;
+          order_id?: string | null;
+          cart_size?: number | null;
+          metadata?: Json;
         };
         Relationships: [];
       };

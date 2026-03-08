@@ -10,8 +10,9 @@ type ShopPageProps = {
 };
 
 export const metadata: Metadata = {
-  title: "Shop",
-  description: "Browse Wild Rose Design product categories and add items to your cart.",
+  title: "Shop Custom Apparel & Accessories",
+  description:
+    "Browse Wild Rose Designs categories, compare pricing, and choose product options before secure checkout.",
 };
 
 export const dynamic = "force-dynamic";
@@ -100,6 +101,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                   <h3 className="mt-3 text-lg text-forest">{product.title}</h3>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <p className="text-lg font-bold text-rose">
+                      {product.hasVariants ? "From " : ""}
                       ${(product.effectivePriceCents / 100).toFixed(2)}
                       {product.saleEnabled ? (
                         <span className="ml-2 text-xs font-medium text-foreground/55 line-through">

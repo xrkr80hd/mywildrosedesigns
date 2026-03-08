@@ -17,9 +17,16 @@ const bodyFont = Manrope({
 const siteDescription =
   "Custom apparel, school spirit wear, seasonal collections, and custom design uploads.";
 
-const metadataBase = new URL(
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mywildrosedesigns.com",
-);
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mywildrosedesigns.com";
+const metadataBase = new URL(siteUrl);
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Wild Rose Designs, LLC",
+  url: siteUrl,
+  logo: `${siteUrl}/assets/img/MyWRDLogo.png`,
+  description: siteDescription,
+};
 
 export const metadata: Metadata = {
   metadataBase,
@@ -63,6 +70,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${headingFont.variable} ${bodyFont.variable} antialiased`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        />
         <SiteShell>{children}</SiteShell>
       </body>
     </html>

@@ -79,8 +79,10 @@ export default async function Home() {
               ? {
                   id: data.popup.product.id,
                   title: data.popup.product.title,
+                  slug: data.popup.product.slug,
                   effectivePriceCents: data.popup.product.effectivePriceCents,
                   imageUrl: data.popup.product.imageUrl,
+                  hasVariants: data.popup.product.hasVariants,
                 }
               : null
           }
@@ -165,6 +167,7 @@ export default async function Home() {
                     </p>
                   ) : null}
                   <p className="text-base font-bold text-rose">
+                    {product.hasVariants ? "From " : ""}
                     ${(product.effectivePriceCents / 100).toFixed(2)}
                     {product.saleEnabled ? (
                       <span className="ml-2 text-xs font-medium text-foreground/55 line-through">
@@ -173,12 +176,22 @@ export default async function Home() {
                     ) : null}
                   </p>
                 </div>
-                <AddToCartButton
-                  id={product.id}
-                  title={product.title}
-                  price={product.effectivePriceCents / 100}
-                  label={product.cartCtaText}
-                />
+                {product.hasVariants ? (
+                  <Link
+                    href={`/shop/${product.slug}`}
+                    className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                  >
+                    Choose Options
+                  </Link>
+                ) : (
+                  <AddToCartButton
+                    id={product.id}
+                    title={product.title}
+                    price={product.effectivePriceCents / 100}
+                    productSlug={product.slug}
+                    label={product.cartCtaText}
+                  />
+                )}
               </div>
             </article>
           ))}

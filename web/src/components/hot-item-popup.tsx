@@ -15,8 +15,10 @@ type HotItemPopupProps = {
   product: {
     id: string;
     title: string;
+    slug: string;
     effectivePriceCents: number;
     imageUrl: string;
+    hasVariants: boolean;
   } | null;
 };
 
@@ -92,14 +94,24 @@ export function HotItemPopup({
       {showCta ? (
         <div className="mt-3">
           {product ? (
-            <AddToCartButton
-              id={product.id}
-              title={product.title}
-              price={product.effectivePriceCents / 100}
-              label={ctaText}
-              addedLabel="In Your Cart"
-              className="w-full rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose/90"
-            />
+            product.hasVariants ? (
+              <Link
+                href={`/shop/${product.slug}`}
+                className="inline-flex w-full items-center justify-center rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose/90"
+              >
+                {ctaText || "Choose Options"}
+              </Link>
+            ) : (
+              <AddToCartButton
+                id={product.id}
+                title={product.title}
+                price={product.effectivePriceCents / 100}
+                productSlug={product.slug}
+                label={ctaText}
+                addedLabel="In Your Cart"
+                className="w-full rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose/90"
+              />
+            )
           ) : (
             <Link
               href={ctaHref || "/shop"}
