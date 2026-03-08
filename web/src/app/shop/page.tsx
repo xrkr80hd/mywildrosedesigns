@@ -4,9 +4,9 @@ import Link from "next/link";
 import { getStorefrontData } from "@/lib/storefront";
 
 type ShopPageProps = {
-  searchParams?: {
-    category?: string;
-  };
+  searchParams?: Promise<{
+    category?: string | string[];
+  }>;
 };
 
 export const metadata: Metadata = {
@@ -18,9 +18,17 @@ export const dynamic = "force-dynamic";
 
 export default async function ShopPage({ searchParams }: ShopPageProps) {
   const data = await getStorefrontData();
-  const category = searchParams?.category?.trim() ?? "";
-  const products = category
-    ? data.products.filter((product) => product.categoryName === category)
+  const resolvedSearchParams = await searchParams;
+  const categoryParam = resolvedSearchParams?.category;
+  const rawCategory = Array.isArray(categoryParam) ? categoryParam[0] : categoryParam;
+  const normalizedCategory = rawCategory?.trim().toLowerCase() ?? "";
+
+  const products = normalizedCategory
+    ? data.products.filter((product) => {
+        const normalizedName = product.categoryName.trim().toLowerCase();
+        const normalizedSlug = product.categorySlug.trim().toLowerCase();
+        return normalizedName === normalizedCategory || normalizedSlug === normalizedCategory;
+      })
     : data.products;
   const grouped = data.categoryNames
     .map((categoryName) => ({
@@ -29,7 +37,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     }))
     .filter((group) => group.items.length > 0);
 
-  if (!category && grouped.length === 0 && products.length > 0) {
+  if (!normalizedCategory && grouped.length === 0 && products.length > 0) {
     grouped.push({
       categoryName: "Products",
       items: products,
@@ -44,26 +52,32 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
         </p>
         <h1 className="mt-2 text-4xl text-forest">Shop by Category</h1>
         <p className="mt-2 text-sm text-foreground/75">
-          Browse apparel, school spirit wear, seasonal pieces, and custom-ready products.
+          Choose a category to see only matching products.
         </p>
       </header>
 
       <section className="mt-5 flex flex-wrap gap-2">
         <Link
           href="/shop"
-          className={`filter-tab ${!category ? "filter-tab-active" : ""}`}
+          className={`filter-tab ${!normalizedCategory ? "filter-tab-active" : ""}`}
         >
           All Products
         </Link>
-        {data.categoryNames.map((item) => (
-          <Link
-            key={item}
-            href={`/shop?category=${encodeURIComponent(item)}`}
-            className={`filter-tab ${category === item ? "filter-tab-active" : ""}`}
-          >
-            {item}
-          </Link>
-        ))}
+        {data.categoryNames.map((item) => {
+          const normalizedItem = item.trim().toLowerCase();
+
+          return (
+            <Link
+              key={item}
+              href={`/shop?category=${encodeURIComponent(item)}`}
+              className={`filter-tab ${
+                normalizedCategory === normalizedItem ? "filter-tab-active" : ""
+              }`}
+            >
+              {item}
+            </Link>
+          );
+        })}
       </section>
 
       <section className="mt-6 space-y-8">
