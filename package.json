@@ -4,6 +4,11 @@
   "engines": {
     "node": ">=20.9.0"
   },
+  "dependencies": {
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
   "scripts": {
     "build": "npm --prefix web ci && npm run sync-root-node-modules && npm --prefix web run build && npm run sync-next-output",
     "dev": "npm --prefix web run dev",
