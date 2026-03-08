@@ -8,6 +8,11 @@ function readRequiredEnv(key: string): string {
   return value;
 }
 
+function hasEnvValue(key: string): boolean {
+  const value = process.env[key];
+  return Boolean(value && value.trim().length > 0);
+}
+
 export function getSiteUrl(): string {
   const value = process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_SITE_URL;
   return value.endsWith("/") ? value.slice(0, -1) : value;
@@ -29,6 +34,14 @@ export function getStripeServerEnv() {
     stripeSecretKey: readRequiredEnv("STRIPE_SECRET_KEY"),
     stripeWebhookSecret: readRequiredEnv("STRIPE_WEBHOOK_SECRET"),
   };
+}
+
+export function hasStripeSecretKey(): boolean {
+  return hasEnvValue("STRIPE_SECRET_KEY");
+}
+
+export function hasStripeWebhookSecret(): boolean {
+  return hasEnvValue("STRIPE_WEBHOOK_SECRET");
 }
 
 export function getAdminCredentials() {

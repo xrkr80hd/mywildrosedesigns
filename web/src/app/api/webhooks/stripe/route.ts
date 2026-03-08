@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { getStripeServerEnv } from "@/lib/env";
+import {
+  getStripeServerEnv,
+  hasStripeSecretKey,
+  hasStripeWebhookSecret,
+} from "@/lib/env";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -49,6 +53,13 @@ async function markOrderCancelled(session: Stripe.Checkout.Session) {
 }
 
 export async function POST(request: Request) {
+  if (!hasStripeSecretKey() || !hasStripeWebhookSecret()) {
+    return NextResponse.json(
+      { error: "Stripe webhook is not configured yet." },
+      { status: 503 },
+    );
+  }
+
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
     return NextResponse.json({ error: "Missing Stripe signature." }, { status: 400 });

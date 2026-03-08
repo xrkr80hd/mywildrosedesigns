@@ -3,7 +3,7 @@ import {
   checkoutRequestSchema,
   normalizeOptionalText,
 } from "@/lib/checkout-schema";
-import { getSiteUrl, getUploadBucket } from "@/lib/env";
+import { getSiteUrl, getUploadBucket, hasStripeSecretKey } from "@/lib/env";
 import {
   getProductOptionById,
   PRODUCT_OPTION_IDS,
@@ -35,6 +35,18 @@ function getBaseUrlFromRequest(request: Request): string {
 }
 
 export async function POST(request: Request) {
+  const supabase = getSupabaseAdminClient();
+  const bucket = getUploadBucket();
+  let createdOrderId: string | null = null;
+  let uploadedFilePath: string | null = null;
+
+  if (!hasStripeSecretKey()) {
+    return NextResponse.json(
+      { error: "Checkout is temporarily unavailable while payments are being configured." },
+      { status: 503 },
+    );
+  }
+
   try {
     const formData = await request.formData();
     const parsedPayload = checkoutRequestSchema.safeParse({
@@ -73,9 +85,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid product option." }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdminClient();
     const stripe = getStripeServerClient();
-    const bucket = getUploadBucket();
     const filePath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${sanitizeFileName(designFile.name)}`;
 
     const uploadResult = await supabase.storage
@@ -88,6 +98,7 @@ export async function POST(request: Request) {
     if (uploadResult.error) {
       throw new Error(uploadResult.error.message);
     }
+    uploadedFilePath = filePath;
 
     const amountCents = selectedOption.amountCents * parsedPayload.data.quantity;
     const orderInsertResult = await supabase
@@ -112,6 +123,7 @@ export async function POST(request: Request) {
     }
 
     const orderId = orderInsertResult.data.id as string;
+    createdOrderId = orderId;
     const baseUrl = getBaseUrlFromRequest(request);
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -153,6 +165,18 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
+    if (createdOrderId) {
+      await supabase
+        .from("orders")
+        .delete()
+        .eq("id", createdOrderId)
+        .eq("status", "pending_payment");
+    }
+
+    if (uploadedFilePath) {
+      await supabase.storage.from(bucket).remove([uploadedFilePath]);
+    }
+
     console.error("Checkout initialization failed", error);
     return NextResponse.json(
       { error: "Unable to start checkout right now. Please try again." },

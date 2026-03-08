@@ -3,7 +3,7 @@ import {
   cartCheckoutRequestSchema,
   normalizeOptionalText,
 } from "@/lib/checkout-schema";
-import { getSiteUrl } from "@/lib/env";
+import { getSiteUrl, hasStripeSecretKey } from "@/lib/env";
 import { getEffectivePriceCents } from "@/lib/pricing";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -30,6 +30,13 @@ function getBaseUrlFromRequest(request: Request): string {
 export async function POST(request: Request) {
   const supabase = getSupabaseAdminClient();
   let createdOrderId: string | null = null;
+
+  if (!hasStripeSecretKey()) {
+    return NextResponse.json(
+      { error: "Checkout is temporarily unavailable while payments are being configured." },
+      { status: 503 },
+    );
+  }
 
   try {
     const body = await request.json();
