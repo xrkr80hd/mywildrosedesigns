@@ -340,7 +340,7 @@ function AdminDropdownSection({
           <p className="mt-1 text-sm text-foreground/70">{description}</p>
         </div>
         <span className="mt-1 rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900">
-          Expand
+          &#9662;
         </span>
       </summary>
       <div className="mt-4">{children}</div>
@@ -699,7 +699,7 @@ export default async function AdminPage() {
                   </p>
                 </div>
                 <span className="rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900">
-                  Expand Inventory
+                  &#9662;
                 </span>
               </summary>
 
