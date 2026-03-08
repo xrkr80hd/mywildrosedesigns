@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { OrderForm } from "@/components/order-form";
+import { getUploadProductOptions } from "@/lib/product-options-store";
 
 export const metadata: Metadata = {
   title: "Upload",
@@ -13,7 +14,9 @@ const steps = [
   "Production starts and status updates are tracked in admin.",
 ];
 
-export default function UploadPage() {
+export default async function UploadPage() {
+  const options = await getUploadProductOptions();
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
       <header className="rounded-3xl border border-rose/20 bg-white/85 p-7">
@@ -49,7 +52,7 @@ export default function UploadPage() {
           </div>
         </article>
 
-        <OrderForm />
+        <OrderForm options={options} />
       </section>
     </main>
   );

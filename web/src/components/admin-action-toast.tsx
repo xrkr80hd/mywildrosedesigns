@@ -18,6 +18,7 @@ const TOAST_MESSAGES: Record<string, string> = {
   product_created: "Product created.",
   product_updated: "Product updated.",
   product_deleted: "Product deleted.",
+  transfer_pricing_saved: "Upload transfer pricing updated.",
   message_updated: "Message status updated.",
   order_updated: "Order status updated.",
   invalid_payload: "Please review the form fields and try again.",

@@ -1,19 +1,28 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { PRODUCT_OPTIONS } from "@/lib/product-options";
+import type { ProductOption } from "@/lib/product-options";
 
 type CheckoutResponse = {
   url?: string;
   error?: string;
 };
 
-export function OrderForm() {
+type OrderFormProps = {
+  options: ProductOption[];
+};
+
+export function OrderForm({ options }: OrderFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const hasAvailableOptions = options.length > 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!hasAvailableOptions) {
+      setError("Upload checkout options are temporarily unavailable.");
+      return;
+    }
     setIsSubmitting(true);
     setError("");
 
@@ -86,15 +95,21 @@ export function OrderForm() {
             <select
               name="productOptionId"
               required
+              disabled={!hasAvailableOptions}
               className="w-full rounded-xl border border-rose/20 bg-white px-3 py-2 text-sm outline-none transition focus:border-rose"
-              defaultValue={PRODUCT_OPTIONS[0]?.id}
+              defaultValue={options[0]?.id}
             >
-              {PRODUCT_OPTIONS.map((option) => (
+              {options.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name} - ${(option.amountCents / 100).toFixed(2)}
                 </option>
               ))}
             </select>
+            {!hasAvailableOptions ? (
+              <p className="text-xs text-red-700">
+                Upload checkout options are temporarily unavailable. Please contact support.
+              </p>
+            ) : null}
           </label>
           <label className="space-y-1">
             <span className="text-sm font-semibold text-forest">Quantity</span>
@@ -140,11 +155,11 @@ export function OrderForm() {
 
         {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-xl bg-forest px-4 py-3 text-sm font-semibold text-white transition hover:bg-forest/90 disabled:cursor-not-allowed disabled:opacity-70"
-        >
+          <button
+            type="submit"
+            disabled={isSubmitting || !hasAvailableOptions}
+            className="w-full rounded-xl bg-forest px-4 py-3 text-sm font-semibold text-white transition hover:bg-forest/90 disabled:cursor-not-allowed disabled:opacity-70"
+          >
           {isSubmitting ? "Redirecting to secure checkout..." : "Upload Design and Checkout"}
         </button>
       </form>

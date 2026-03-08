@@ -13,7 +13,7 @@ export type ProductOption = {
   amountCents: number;
 };
 
-export const PRODUCT_OPTIONS: ProductOption[] = [
+export const DEFAULT_PRODUCT_OPTIONS: ProductOption[] = [
   {
     id: "single-transfer",
     name: 'Single Transfer (up to 12")',
@@ -34,8 +34,16 @@ export const PRODUCT_OPTIONS: ProductOption[] = [
   },
 ];
 
-const productOptionById = new Map(PRODUCT_OPTIONS.map((option) => [option.id, option]));
+export const PRODUCT_OPTIONS: ProductOption[] = DEFAULT_PRODUCT_OPTIONS;
 
-export function getProductOptionById(optionId: string): ProductOption | undefined {
-  return productOptionById.get(optionId as ProductOptionId);
+export function isProductOptionId(optionId: string): optionId is ProductOptionId {
+  return PRODUCT_OPTION_IDS.includes(optionId as ProductOptionId);
+}
+
+export function getDefaultProductOptionById(optionId: string): ProductOption | undefined {
+  if (!isProductOptionId(optionId)) {
+    return undefined;
+  }
+
+  return DEFAULT_PRODUCT_OPTIONS.find((option) => option.id === optionId);
 }

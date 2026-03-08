@@ -211,6 +211,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      upload_product_options: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          sort_order: number;
+          name: string;
+          description: string;
+          amount_cents: number;
+          active: boolean;
+        };
+        Insert: {
+          id: string;
+          created_at?: string;
+          updated_at?: string;
+          sort_order?: number;
+          name: string;
+          description?: string;
+          amount_cents: number;
+          active?: boolean;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          sort_order?: number;
+          name?: string;
+          description?: string;
+          amount_cents?: number;
+          active?: boolean;
+        };
+        Relationships: [];
+      };
       homepage_settings: {
         Row: {
           id: string;

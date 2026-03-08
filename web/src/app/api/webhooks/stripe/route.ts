@@ -5,6 +5,7 @@ import {
   hasStripeSecretKey,
   hasStripeWebhookSecret,
 } from "@/lib/env";
+import { recordSaleMovementsForOrder } from "@/lib/order-sales";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -17,19 +18,35 @@ async function markOrderPaid(session: Stripe.Checkout.Session) {
   }
 
   const supabase = getSupabaseAdminClient();
-  const updateResult = await supabase
+  const existingResult = await supabase
     .from("orders")
-    .update({
-      status: "paid",
-      paid_at: new Date().toISOString(),
-      stripe_payment_intent_id:
-        typeof session.payment_intent === "string" ? session.payment_intent : null,
-    })
-    .eq("id", orderId);
+    .select("status")
+    .eq("id", orderId)
+    .maybeSingle();
 
-  if (updateResult.error) {
-    throw new Error(updateResult.error.message);
+  if (existingResult.error) {
+    throw new Error(existingResult.error.message);
   }
+
+  const isAlreadyPaid = existingResult.data?.status === "paid";
+
+  if (!isAlreadyPaid) {
+    const updateResult = await supabase
+      .from("orders")
+      .update({
+        status: "paid",
+        paid_at: new Date().toISOString(),
+        stripe_payment_intent_id:
+          typeof session.payment_intent === "string" ? session.payment_intent : null,
+      })
+      .eq("id", orderId);
+
+    if (updateResult.error) {
+      throw new Error(updateResult.error.message);
+    }
+  }
+
+  await recordSaleMovementsForOrder(orderId, "stripe_webhook");
 }
 
 async function markOrderCancelled(session: Stripe.Checkout.Session) {

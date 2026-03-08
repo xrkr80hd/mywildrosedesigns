@@ -4,10 +4,8 @@ import {
   normalizeOptionalText,
 } from "@/lib/checkout-schema";
 import { getSiteUrl, getUploadBucket, hasStripeSecretKey } from "@/lib/env";
-import {
-  getProductOptionById,
-  PRODUCT_OPTION_IDS,
-} from "@/lib/product-options";
+import { PRODUCT_OPTION_IDS } from "@/lib/product-options";
+import { getUploadProductOptionById } from "@/lib/product-options-store";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -80,7 +78,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const selectedOption = getProductOptionById(parsedPayload.data.productOptionId);
+    const selectedOption = await getUploadProductOptionById(parsedPayload.data.productOptionId);
     if (!selectedOption || !PRODUCT_OPTION_IDS.includes(selectedOption.id)) {
       return NextResponse.json({ error: "Invalid product option." }, { status: 400 });
     }
@@ -128,8 +126,8 @@ export async function POST(request: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: parsedPayload.data.customerEmail,
-      success_url: `${baseUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/cancel?order=${orderId}`,
+      success_url: `${baseUrl}/thank-you?source=upload&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/cancel?source=upload&order=${orderId}`,
       metadata: {
         order_id: orderId,
         product_option: selectedOption.id,

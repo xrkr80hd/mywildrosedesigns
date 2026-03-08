@@ -5,6 +5,8 @@ import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
 import { AdminConfirmSubmitButton } from "@/components/admin-confirm-submit-button";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
+import type { ProductOptionAdminRow } from "@/lib/product-options-store";
+import { getUploadProductOptionsForAdmin } from "@/lib/product-options-store";
 import { getUploadBucket } from "@/lib/env";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
@@ -15,6 +17,7 @@ import {
   deleteProductCard,
   deleteWelcomePost,
   saveHomepageSettings,
+  saveUploadTransferPricing,
   savePromoPopup,
   updateCategory,
   updateContactMessage,
@@ -120,6 +123,20 @@ type InventoryGroup = {
   id: string;
   label: string;
   items: ProductRow[];
+};
+
+type InventoryMovementRow = {
+  product_id: string;
+  quantity_delta: number;
+  reference_order_id: string | null;
+};
+
+type BestSellerRow = {
+  productId: string;
+  title: string;
+  sku: string;
+  unitsSold: number;
+  orderCount: number;
 };
 
 const DEFAULT_HOMEPAGE: HomepageRow = {
@@ -253,6 +270,67 @@ async function getProducts() {
   return (result.data ?? []) as ProductRow[];
 }
 
+async function getSaleMovements() {
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase
+    .from("inventory_movements")
+    .select("product_id, quantity_delta, reference_order_id")
+    .eq("movement_type", "sale")
+    .limit(4000);
+
+  return (result.data ?? []) as InventoryMovementRow[];
+}
+
+function buildBestSellerRows(
+  products: ProductRow[],
+  movements: InventoryMovementRow[],
+): BestSellerRow[] {
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const aggregates = new Map<
+    string,
+    {
+      unitsSold: number;
+      orderIds: Set<string>;
+    }
+  >();
+
+  for (const movement of movements) {
+    const product = productById.get(movement.product_id);
+    if (!product) {
+      continue;
+    }
+
+    const soldUnits = Math.max(0, -Number(movement.quantity_delta ?? 0));
+    if (soldUnits <= 0) {
+      continue;
+    }
+
+    const entry = aggregates.get(movement.product_id) ?? {
+      unitsSold: 0,
+      orderIds: new Set<string>(),
+    };
+    entry.unitsSold += soldUnits;
+    if (movement.reference_order_id) {
+      entry.orderIds.add(movement.reference_order_id);
+    }
+    aggregates.set(movement.product_id, entry);
+  }
+
+  return Array.from(aggregates.entries())
+    .map(([productId, aggregate]) => {
+      const product = productById.get(productId)!;
+      return {
+        productId,
+        title: product.title,
+        sku: product.sku,
+        unitsSold: aggregate.unitsSold,
+        orderCount: aggregate.orderIds.size,
+      };
+    })
+    .sort((a, b) => b.unitsSold - a.unitsSold || b.orderCount - a.orderCount)
+    .slice(0, 15);
+}
+
 async function getHomepageSettings() {
   const supabase = getSupabaseAdminClient();
   const result = await supabase
@@ -351,7 +429,17 @@ function AdminDropdownSection({
 }
 
 export default async function AdminPage() {
-  const [orders, categories, products, homepage, popup, welcomePosts, messages] =
+  const [
+    orders,
+    categories,
+    products,
+    homepage,
+    popup,
+    welcomePosts,
+    messages,
+    uploadOptions,
+    saleMovements,
+  ] =
     await Promise.all([
       getOrders(),
       getCategories(),
@@ -360,6 +448,8 @@ export default async function AdminPage() {
       getPopup(),
       getWelcomePosts(),
       getContactMessages(),
+      getUploadProductOptionsForAdmin(),
+      getSaleMovements(),
     ]);
 
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
@@ -385,6 +475,7 @@ export default async function AdminPage() {
   const actionableOrderStatuses = new Set(["pending_payment", "paid"]);
   const newOrderCount = orders.filter((order) => actionableOrderStatuses.has(order.status)).length;
   const latestOrderId = orders.find((order) => actionableOrderStatuses.has(order.status))?.id ?? null;
+  const bestSellerRows = buildBestSellerRows(products, saleMovements);
 
   return (
     <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-6 py-10">
@@ -597,6 +688,93 @@ export default async function AdminPage() {
             </article>
           ))}
         </div>
+      </AdminDropdownSection>
+
+      <AdminDropdownSection
+        title="Upload Transfer Pricing"
+        description="Edit custom upload transfer names, descriptions, pricing, and availability."
+      >
+        <form action={saveUploadTransferPricing} className="mt-4 space-y-3">
+          {uploadOptions.map((option: ProductOptionAdminRow) => (
+            <article key={option.id} className="rounded-2xl border border-rose/20 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                {option.id}
+              </p>
+              <div className="mt-2 grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Name</span>
+                  <input
+                    name={`name_${option.id}`}
+                    defaultValue={option.name}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span>
+                  <input
+                    name={`amountCents_${option.id}`}
+                    type="number"
+                    min={100}
+                    defaultValue={option.amountCents}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span>
+                  <textarea
+                    name={`description_${option.id}`}
+                    rows={2}
+                    defaultValue={option.description}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" name={`active_${option.id}`} defaultChecked={option.active} />
+                  Option active
+                </label>
+              </div>
+            </article>
+          ))}
+          <div>
+            <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">
+              Save Transfer Pricing
+            </button>
+          </div>
+        </form>
+      </AdminDropdownSection>
+
+      <AdminDropdownSection
+        title="Best Sellers (Internal Tracking)"
+        description="Top sellers based on paid cart orders recorded in your inventory movement logs."
+      >
+        {bestSellerRows.length === 0 ? (
+          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm text-foreground/75">
+            No paid cart sales recorded yet. As paid orders come in, this list will populate automatically.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-rose/20 bg-white">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-surface">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-forest">Product</th>
+                  <th className="px-4 py-3 font-semibold text-forest">SKU</th>
+                  <th className="px-4 py-3 font-semibold text-forest">Units Sold</th>
+                  <th className="px-4 py-3 font-semibold text-forest">Paid Orders</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bestSellerRows.map((row) => (
+                  <tr key={row.productId} className="border-t border-rose/15">
+                    <td className="px-4 py-3">{row.title}</td>
+                    <td className="px-4 py-3">{row.sku}</td>
+                    <td className="px-4 py-3 font-semibold text-forest">{row.unitsSold}</td>
+                    <td className="px-4 py-3">{row.orderCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </AdminDropdownSection>
 
       <AdminDropdownSection

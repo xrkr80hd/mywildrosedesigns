@@ -8,7 +8,7 @@ function unauthorized(request: NextRequest) {
   return NextResponse.redirect(loginUrl);
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/admin/login")) {
     return NextResponse.next();
   }

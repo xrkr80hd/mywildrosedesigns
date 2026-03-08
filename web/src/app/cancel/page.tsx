@@ -1,6 +1,28 @@
 import Link from "next/link";
 
-export default function CancelPage() {
+type CancelPageProps = {
+  searchParams?: {
+    source?: string | string[];
+    order?: string | string[];
+  };
+};
+
+function toSingle(value?: string | string[]): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+  return value ?? "";
+}
+
+export default function CancelPage({ searchParams }: CancelPageProps) {
+  const source = toSingle(searchParams?.source);
+  const orderId = toSingle(searchParams?.order);
+  const shortOrderId = orderId ? orderId.slice(0, 8) : "";
+  const uploadSavedMessage =
+    source === "upload"
+      ? `Your uploaded design is saved${shortOrderId ? ` (order ${shortOrderId})` : ""}. You can retry checkout any time.`
+      : "You can return and retry checkout when ready.";
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-10">
       <section className="w-full rounded-3xl border border-rose/20 bg-surface p-8 text-center shadow-sm">
@@ -9,8 +31,7 @@ export default function CancelPage() {
         </p>
         <h1 className="mt-3 text-4xl text-forest">No payment was completed.</h1>
         <p className="mx-auto mt-3 max-w-lg text-sm text-foreground/75">
-          Your design upload is still saved. You can return and retry checkout when
-          ready.
+          {uploadSavedMessage}
         </p>
 
         <Link
