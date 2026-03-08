@@ -49,38 +49,23 @@ h4 {
 }
 
 .hero-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  border: 1px solid rgba(159, 59, 85, 0.3);
-  border-left: 4px solid var(--rose);
-  border-radius: 0.85rem;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(246, 229, 219, 0.9));
-  padding: 0.42rem 0.9rem 0.42rem 0.72rem;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  display: inline-block;
+  border: 1px solid rgba(47, 75, 60, 0.26);
+  border-radius: 0.35rem;
+  background: #f3ece4;
+  padding: 0.4rem 0.78rem;
+  font-size: 0.71rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--rose);
-  box-shadow:
-    0 10px 22px rgba(47, 75, 60, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
-}
-
-.hero-kicker::before {
-  content: "";
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--rose), var(--gold));
-  box-shadow: 0 0 0 3px rgba(159, 59, 85, 0.12);
+  color: var(--forest);
 }
 
 @media (max-width: 480px) {
   .hero-kicker {
-    font-size: 0.66rem;
-    letter-spacing: 0.12em;
-    padding: 0.38rem 0.72rem 0.38rem 0.58rem;
+    font-size: 0.64rem;
+    letter-spacing: 0.1em;
+    padding: 0.35rem 0.62rem;
   }
 }
 

@@ -121,7 +121,7 @@ type InventoryGroup = {
 };
 
 const DEFAULT_HOMEPAGE: HomepageRow = {
-  hero_badge: "Custom designs, made for you",
+  hero_badge: "Custom Prints • Fast Turnaround",
   hero_title: "Wild Rose Design LLC",
   hero_description:
     "Custom apparel, school spirit wear, team merch, and seasonal drops. Browse products, add to cart, or upload your own design.",

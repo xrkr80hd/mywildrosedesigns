@@ -60,7 +60,7 @@ export type PromoPopup = {
 };
 
 const DEFAULT_SETTINGS: HomepageSettings = {
-  heroBadge: "Custom designs, made for you",
+  heroBadge: "Custom Prints • Fast Turnaround",
   heroTitle: "Wild Rose Design LLC",
   heroDescription:
     "Custom apparel, school spirit wear, team merch, and seasonal drops. Browse products, add to cart, or upload your own design.",
@@ -96,6 +96,20 @@ const DEFAULT_POSTS: WelcomePost[] = [
     sortOrder: 30,
   },
 ];
+
+function normalizeHeroBadge(value: string): string {
+  const cleaned = value.trim();
+  if (!cleaned) {
+    return DEFAULT_SETTINGS.heroBadge;
+  }
+
+  // Keep legacy DB values from showing on the storefront.
+  if (/handmade\s+with\s+care/i.test(cleaned)) {
+    return DEFAULT_SETTINGS.heroBadge;
+  }
+
+  return cleaned;
+}
 
 export async function getStorefrontData() {
   try {
@@ -211,7 +225,7 @@ export async function getStorefrontData() {
 
     const settings: HomepageSettings = settingsResult.data
       ? {
-          heroBadge: settingsResult.data.hero_badge,
+          heroBadge: normalizeHeroBadge(settingsResult.data.hero_badge),
           heroTitle: settingsResult.data.hero_title,
           heroDescription: settingsResult.data.hero_description,
           primaryCtaLabel: settingsResult.data.primary_cta_label,
