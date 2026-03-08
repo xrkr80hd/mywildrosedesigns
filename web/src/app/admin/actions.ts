@@ -354,6 +354,57 @@ async function ensureUniqueSku(baseSku: string, ignoreId?: string): Promise<stri
   }
 }
 
+async function getOrCreateFallbackCategory(excludedCategoryId: string): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+  const existingResult = await supabase
+    .from("categories")
+    .select("id")
+    .eq("slug", "uncategorized")
+    .neq("id", excludedCategoryId)
+    .limit(1);
+
+  if (existingResult.error) {
+    throw new Error(existingResult.error.message);
+  }
+
+  const existingId = (existingResult.data ?? [])[0]?.id;
+  if (existingId) {
+    return String(existingId);
+  }
+
+  const slug = await ensureUniqueSlug("categories", "uncategorized");
+  let createResult = await supabase
+    .from("categories")
+    .insert({
+      name: "Uncategorized",
+      slug,
+      sort_order: 9999,
+      image_url: null,
+      active: true,
+    })
+    .select("id")
+    .single();
+
+  if (createResult.error && isMissingColumnError(createResult.error, "image_url")) {
+    createResult = await supabase
+      .from("categories")
+      .insert({
+        name: "Uncategorized",
+        slug,
+        sort_order: 9999,
+        active: true,
+      })
+      .select("id")
+      .single();
+  }
+
+  if (createResult.error || !createResult.data?.id) {
+    throw new Error(createResult.error?.message ?? "Unable to create fallback category.");
+  }
+
+  return String(createResult.data.id);
+}
+
 export async function updateOrderStatus(formData: FormData) {
   const parsed = updateStatusSchema.safeParse({
     orderId: formData.get("orderId"),
@@ -617,7 +668,7 @@ export async function updateCategory(formData: FormData) {
 }
 
 export async function deleteCategory(formData: FormData) {
-  const redirectTo = resolveAdminRedirectTarget(formData, "/admin/inventory");
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
   const parsed = deleteCategorySchema.safeParse({
     categoryId: formData.get("categoryId"),
   });
@@ -627,17 +678,20 @@ export async function deleteCategory(formData: FormData) {
   }
 
   const supabase = getSupabaseAdminClient();
-  const linkedProductsResult = await supabase
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("category_id", parsed.data.categoryId);
-
-  if (linkedProductsResult.error) {
+  let fallbackCategoryId = "";
+  try {
+    fallbackCategoryId = await getOrCreateFallbackCategory(parsed.data.categoryId);
+  } catch {
     return redirectAdminError("save_failed", redirectTo);
   }
 
-  if ((linkedProductsResult.count ?? 0) > 0) {
-    return redirectAdminError("category_has_products", redirectTo);
+  const moveProductsResult = await supabase
+    .from("products")
+    .update({ category_id: fallbackCategoryId })
+    .eq("category_id", parsed.data.categoryId);
+
+  if (moveProductsResult.error) {
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   const deleteResult = await supabase

@@ -13,7 +13,7 @@ const TOAST_MESSAGES: Record<string, string> = {
   welcome_deleted: "Feature card deleted.",
   category_created: "Category created.",
   category_updated: "Category updated.",
-  category_deleted: "Category deleted.",
+  category_deleted: "Category deleted. Existing products were moved to Uncategorized.",
   category_has_products: "Move or delete products in this category before deleting it.",
   product_created: "Product created.",
   product_updated: "Product updated.",

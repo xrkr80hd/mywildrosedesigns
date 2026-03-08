@@ -10,6 +10,7 @@ import {
   createCategory,
   createProduct,
   createWelcomePost,
+  deleteCategory,
   deleteProductCard,
   deleteWelcomePost,
   saveHomepageSettings,
@@ -645,7 +646,19 @@ export default async function AdminPage() {
                   recommendedSize="1200 x 800 px"
                   helperText="Optional category image. Upload a new one to replace the current URL."
                 />
-                <div className="md:col-span-2"><button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">Save Category</button></div>
+                <div className="md:col-span-2 flex flex-wrap items-center gap-2">
+                  <button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">
+                    Save Category
+                  </button>
+                  <button
+                    type="submit"
+                    formAction={deleteCategory}
+                    formNoValidate
+                    className="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    Delete Category (Keep Items)
+                  </button>
+                </div>
               </form>
             </details>
           ))}
