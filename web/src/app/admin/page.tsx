@@ -2,6 +2,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
+import { AdminConfirmSubmitButton } from "@/components/admin-confirm-submit-button";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import { getUploadBucket } from "@/lib/env";
@@ -646,19 +647,21 @@ export default async function AdminPage() {
                   recommendedSize="1200 x 800 px"
                   helperText="Optional category image. Upload a new one to replace the current URL."
                 />
-                <div className="md:col-span-2 flex flex-wrap items-center gap-2">
+                <div className="md:col-span-2">
                   <button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">
                     Save Category
                   </button>
-                  <button
-                    type="submit"
-                    formAction={deleteCategory}
-                    formNoValidate
-                    className="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-                  >
-                    Delete Category (Keep Items)
-                  </button>
                 </div>
+              </form>
+
+              <form action={deleteCategory} className="mt-2">
+                <input type="hidden" name="categoryId" value={category.id} />
+                <input type="hidden" name="redirectTo" value="/admin" />
+                <AdminConfirmSubmitButton
+                  buttonLabel="Delete Category (Keep Items)"
+                  confirmMessage="Are you sure you'd like to delete this category? Items will be kept and moved to Uncategorized."
+                  idleClassName="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+                />
               </form>
             </details>
           ))}
@@ -773,9 +776,12 @@ export default async function AdminPage() {
 
                       <form action={deleteProductCard} className="mt-2 flex justify-end">
                         <input type="hidden" name="productId" value={product.id} />
-                        <button type="submit" className="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
-                          Delete Product
-                        </button>
+                        <input type="hidden" name="redirectTo" value="/admin" />
+                        <AdminConfirmSubmitButton
+                          buttonLabel="Delete Product"
+                          confirmMessage="Are you sure you'd like to delete this item?"
+                          idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        />
                       </form>
                     </details>
                   ))}
