@@ -5,9 +5,10 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "build": "npm --prefix web ci && npm --prefix web run build",
+    "build": "npm --prefix web ci && npm --prefix web run build && npm run sync-next-output",
     "dev": "npm --prefix web run dev",
     "start": "npm --prefix web run start",
-    "lint": "npm --prefix web run lint"
+    "lint": "npm --prefix web run lint",
+    "sync-next-output": "node -e \"const fs=require('node:fs');fs.rmSync('.next',{recursive:true,force:true});fs.cpSync('web/.next','.next',{recursive:true});\""
   }
 }
