@@ -5,10 +5,11 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "build": "npm --prefix web ci && npm --prefix web run build && npm run sync-next-output",
+    "build": "npm --prefix web ci && npm run sync-root-node-modules && npm --prefix web run build && npm run sync-next-output",
     "dev": "npm --prefix web run dev",
     "start": "npm --prefix web run start",
     "lint": "npm --prefix web run lint",
+    "sync-root-node-modules": "node -e \"const fs=require('node:fs');fs.rmSync('node_modules',{recursive:true,force:true});try{fs.symlinkSync('web/node_modules','node_modules','dir');}catch(e){fs.cpSync('web/node_modules','node_modules',{recursive:true});}\"",
     "sync-next-output": "node -e \"const fs=require('node:fs');fs.rmSync('.next',{recursive:true,force:true});fs.cpSync('web/.next','.next',{recursive:true});\""
   }
 }
