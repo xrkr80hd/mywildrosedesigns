@@ -60,7 +60,7 @@ export type PromoPopup = {
 };
 
 const DEFAULT_SETTINGS: HomepageSettings = {
-  heroBadge: "Handmade with care",
+  heroBadge: "Custom designs, made for you",
   heroTitle: "Wild Rose Design LLC",
   heroDescription:
     "Custom apparel, school spirit wear, team merch, and seasonal drops. Browse products, add to cart, or upload your own design.",
@@ -301,4 +301,3 @@ export async function getStorefrontData() {
     };
   }
 }
-
