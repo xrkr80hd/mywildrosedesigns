@@ -253,6 +253,11 @@ function readUploadOptionIds(formData: FormData): string[] {
 function resolveAdminRedirectTarget(formData: FormData, fallback = "/admin"): string {
   const requested = String(formData.get("redirectTo") ?? "").trim();
   if (requested.startsWith("/admin")) {
+    const hashIndex = requested.indexOf("#");
+    if (hashIndex >= 0) {
+      const withoutHash = requested.slice(0, hashIndex);
+      return withoutHash || fallback;
+    }
     return requested;
   }
 
