@@ -12,9 +12,37 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
+async function getOrderIdForSession(session: Stripe.Checkout.Session): Promise<string | null> {
+  const metadataOrderId = session.metadata?.order_id;
+  if (metadataOrderId) {
+    return metadataOrderId;
+  }
+
+  if (!session.id) {
+    return null;
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const lookup = await supabase
+    .from("orders")
+    .select("id")
+    .eq("stripe_checkout_session_id", session.id)
+    .maybeSingle();
+
+  if (lookup.error) {
+    throw new Error(lookup.error.message);
+  }
+
+  return lookup.data?.id ?? null;
+}
+
 async function markOrderPaid(session: Stripe.Checkout.Session) {
-  const orderId = session.metadata?.order_id;
+  const orderId = await getOrderIdForSession(session);
   if (!orderId) {
+    return;
+  }
+
+  if (session.payment_status !== "paid") {
     return;
   }
 
@@ -64,7 +92,7 @@ async function markOrderPaid(session: Stripe.Checkout.Session) {
 }
 
 async function markOrderCancelled(session: Stripe.Checkout.Session) {
-  const orderId = session.metadata?.order_id;
+  const orderId = await getOrderIdForSession(session);
   if (!orderId) {
     return;
   }
@@ -106,12 +134,17 @@ export async function POST(request: Request) {
       stripeWebhookSecret,
     );
 
-    if (event.type === "checkout.session.completed") {
-      await markOrderPaid(event.data.object as Stripe.Checkout.Session);
-    }
-
-    if (event.type === "checkout.session.expired") {
-      await markOrderCancelled(event.data.object as Stripe.Checkout.Session);
+    switch (event.type) {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded":
+        await markOrderPaid(event.data.object as Stripe.Checkout.Session);
+        break;
+      case "checkout.session.async_payment_failed":
+      case "checkout.session.expired":
+        await markOrderCancelled(event.data.object as Stripe.Checkout.Session);
+        break;
+      default:
+        break;
     }
 
     return NextResponse.json({ received: true });

@@ -21,6 +21,8 @@ In Stripe dashboard:
 - Endpoint URL: `https://<your-domain>/api/webhooks/stripe`
 - Events to send:
   - `checkout.session.completed`
+  - `checkout.session.async_payment_succeeded`
+  - `checkout.session.async_payment_failed`
   - `checkout.session.expired`
 
 Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
