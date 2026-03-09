@@ -22,6 +22,7 @@ export const cartCheckoutRequestSchema = z.object({
   customerEmail: z.string().trim().email(),
   customerPhone: z.string().trim().max(30).optional(),
   notes: z.string().trim().max(2000).optional(),
+  shippingMethod: z.enum(["shipping", "pickup"]).optional().default("shipping"),
   items: z.array(cartCheckoutItemSchema).min(1).max(100),
 });
 

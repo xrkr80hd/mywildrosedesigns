@@ -263,8 +263,10 @@ export async function POST(request: Request) {
       (sum, item) => sum + item.unitAmountCents * item.quantity,
       0,
     );
+    const shippingMethod = parsed.data.shippingMethod === "pickup" ? "pickup" : "shipping";
+    const shippingCents = shippingMethod === "shipping" ? SHIPPING_CENTS : 0;
     const totalQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
-    const totalCents = subtotalCents + SHIPPING_CENTS;
+    const totalCents = subtotalCents + shippingCents;
 
     const cartSummary = normalizedItems.map((item) => ({
       productId: item.id,
@@ -280,6 +282,7 @@ export async function POST(request: Request) {
 
     const noteBlocks = [
       normalizeOptionalText(parsed.data.notes),
+      `Fulfillment: ${shippingMethod === "pickup" ? "Local Pickup" : "Shipping"}`,
       `Cart items: ${JSON.stringify(cartSummary)}`,
     ].filter((value): value is string => Boolean(value));
 
@@ -319,25 +322,31 @@ export async function POST(request: Request) {
       },
     }));
 
-    lineItems.push({
-      quantity: 1,
-      price_data: {
-        currency: "usd",
-        unit_amount: SHIPPING_CENTS,
-        product_data: {
-          name: "Shipping",
-          description: "Standard shipping",
+    if (shippingCents > 0) {
+      lineItems.push({
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: shippingCents,
+          product_data: {
+            name: "Shipping",
+            description: "Standard shipping",
+          },
         },
-      },
-    });
+      });
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: parsed.data.customerEmail,
       billing_address_collection: "required",
-      shipping_address_collection: {
-        allowed_countries: ["US"],
-      },
+      ...(shippingMethod === "shipping"
+        ? {
+            shipping_address_collection: {
+              allowed_countries: ["US" as const],
+            },
+          }
+        : {}),
       automatic_tax: {
         enabled: true,
       },
@@ -346,6 +355,7 @@ export async function POST(request: Request) {
       metadata: {
         order_id: createdOrderId,
         checkout_type: "cart",
+        shipping_method: shippingMethod,
       },
       line_items: lineItems,
       allow_promotion_codes: true,

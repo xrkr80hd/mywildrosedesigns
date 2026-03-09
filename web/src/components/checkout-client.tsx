@@ -43,6 +43,7 @@ export function CheckoutClient() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [shippingMethod, setShippingMethod] = useState<"shipping" | "pickup">("shipping");
 
   useEffect(() => {
     setItems(loadItems());
@@ -71,7 +72,8 @@ export function CheckoutClient() {
     () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [items],
   );
-  const total = subtotal + (items.length > 0 ? SHIPPING : 0);
+  const shippingCost = items.length > 0 && shippingMethod === "shipping" ? SHIPPING : 0;
+  const total = subtotal + shippingCost;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,6 +92,7 @@ export function CheckoutClient() {
       customerEmail: String(formData.get("customerEmail") ?? ""),
       customerPhone: String(formData.get("customerPhone") ?? ""),
       notes: String(formData.get("notes") ?? ""),
+      shippingMethod,
       items: items.map((item) => ({
         id: item.id,
         variantId: item.variantId,
@@ -194,6 +197,36 @@ export function CheckoutClient() {
             />
           </label>
 
+          <fieldset className="space-y-2 rounded-xl border border-rose/20 bg-surface/70 p-3">
+            <legend className="px-1 text-sm font-semibold text-forest">Delivery Method</legend>
+            <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-rose/20 bg-white px-3 py-2 text-sm">
+              <span>Shipping</span>
+              <span className="flex items-center gap-2 font-semibold text-forest">
+                {formatUsd(SHIPPING)}
+                <input
+                  type="radio"
+                  name="shippingMethod"
+                  value="shipping"
+                  checked={shippingMethod === "shipping"}
+                  onChange={() => setShippingMethod("shipping")}
+                />
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-rose/20 bg-white px-3 py-2 text-sm">
+              <span>Local Pickup</span>
+              <span className="flex items-center gap-2 font-semibold text-forest">
+                {formatUsd(0)}
+                <input
+                  type="radio"
+                  name="shippingMethod"
+                  value="pickup"
+                  checked={shippingMethod === "pickup"}
+                  onChange={() => setShippingMethod("pickup")}
+                />
+              </span>
+            </label>
+          </fieldset>
+
           {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
 
           <button
@@ -257,8 +290,8 @@ export function CheckoutClient() {
             <span>{formatUsd(subtotal)}</span>
           </div>
           <div className="flex justify-between">
-            <span>Shipping</span>
-            <span>{formatUsd(SHIPPING)}</span>
+            <span>{shippingMethod === "shipping" ? "Shipping" : "Local Pickup"}</span>
+            <span>{formatUsd(shippingCost)}</span>
           </div>
           <div className="flex justify-between text-base font-semibold">
             <span>Total</span>
