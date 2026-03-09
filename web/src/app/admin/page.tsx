@@ -1380,6 +1380,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                           />
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span><input name="priceCents" type="number" min={0.01} step={0.01} defaultValue={formatUsdInput(product.price_cents)} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Stock</span><input name="stockOnHand" type="number" defaultValue={product.stock_on_hand} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <p className="md:col-span-2 text-[11px] text-foreground/70">
+                            Note: Variant price overrides can override base product price on storefront.
+                          </p>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Percent Off</span><input name="salePercentOff" type="number" min={0} max={90} defaultValue={product.sale_percent_off} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Label</span><input name="saleLabel" defaultValue={product.sale_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                           <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Cart Button Text</span><input name="cartCtaText" defaultValue={product.cart_cta_text} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>

@@ -1249,6 +1249,18 @@ export async function updateProductCard(formData: FormData) {
   }
 
   const supabase = getSupabaseAdminClient();
+  const currentProductResult = await supabase
+    .from("products")
+    .select("price_cents")
+    .eq("id", parsed.data.productId)
+    .maybeSingle();
+
+  if (currentProductResult.error) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const previousPriceCents = Number(currentProductResult.data?.price_cents ?? 0);
+
   const updateResult = await supabase
     .from("products")
     .update({
@@ -1272,6 +1284,21 @@ export async function updateProductCard(formData: FormData) {
 
   if (updateResult.error) {
     return redirectAdminError("save_failed", redirectTo);
+  }
+
+  if (previousPriceCents > 0 && previousPriceCents !== parsed.data.priceCents) {
+    const clearMirroredOverridesResult = await supabase
+      .from("product_variants")
+      .update({ price_override_cents: null })
+      .eq("product_id", parsed.data.productId)
+      .eq("price_override_cents", previousPriceCents);
+
+    if (
+      clearMirroredOverridesResult.error &&
+      !isMissingTableError(clearMirroredOverridesResult.error, "product_variants")
+    ) {
+      return redirectAdminError("save_failed", redirectTo);
+    }
   }
 
   revalidatePath("/");
