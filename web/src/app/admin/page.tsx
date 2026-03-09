@@ -1651,44 +1651,44 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               {orders.length} shown ({orderView})
             </p>
           </div>
-          <div className="w-full rounded-2xl border border-forest/20 bg-white/80 p-1.5 shadow-sm md:w-auto">
-            <div className="grid grid-cols-2 gap-1 text-xs font-semibold sm:grid-cols-4">
+          <div className="w-full md:w-auto">
+            <div className="flex flex-wrap items-end gap-4 border-b border-forest/20 pb-1 text-xs font-semibold">
               <Link
                 href={ordersViewHref("active")}
-                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                className={`border-b-2 pb-1 transition ${
                   orderView === "active"
-                    ? "bg-forest text-white shadow-sm"
-                    : "text-forest hover:bg-forest/10"
+                    ? "border-forest text-forest"
+                    : "border-transparent text-foreground/70 hover:text-forest"
                 }`}
               >
                 Active
               </Link>
               <Link
                 href={ordersViewHref("archived")}
-                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                className={`border-b-2 pb-1 transition ${
                   orderView === "archived"
-                    ? "bg-forest text-white shadow-sm"
-                    : "text-forest hover:bg-forest/10"
+                    ? "border-forest text-forest"
+                    : "border-transparent text-foreground/70 hover:text-forest"
                 }`}
               >
                 Archived
               </Link>
               <Link
                 href={ordersViewHref("fulfilled")}
-                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                className={`border-b-2 pb-1 transition ${
                   orderView === "fulfilled"
-                    ? "bg-forest text-white shadow-sm"
-                    : "text-forest hover:bg-forest/10"
+                    ? "border-forest text-forest"
+                    : "border-transparent text-foreground/70 hover:text-forest"
                 }`}
               >
                 Fulfilled
               </Link>
               <Link
                 href={ordersViewHref("all")}
-                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                className={`border-b-2 pb-1 transition ${
                   orderView === "all"
-                    ? "bg-forest text-white shadow-sm"
-                    : "text-forest hover:bg-forest/10"
+                    ? "border-forest text-forest"
+                    : "border-transparent text-foreground/70 hover:text-forest"
                 }`}
               >
                 All
@@ -1702,7 +1702,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             <AdminConfirmSubmitButton
               buttonLabel="Archive Fulfilled/Completed/Cancelled"
               confirmMessage="Archive all fulfilled, completed, and cancelled orders from the active list?"
-              idleClassName="w-full rounded-xl border border-forest/30 bg-white px-4 py-2 text-sm font-semibold text-forest hover:bg-surface"
+              idleClassName="w-full rounded-md border border-forest/30 bg-white px-4 py-2 text-sm font-semibold text-forest hover:bg-surface"
             />
           </form>
           <form action={clearArchivedOrders} className="w-full">
@@ -1710,7 +1710,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             <AdminConfirmSubmitButton
               buttonLabel="Clear Archived Orders"
               confirmMessage="Permanently delete archived fulfilled/completed/cancelled orders? This cannot be undone."
-              idleClassName="w-full rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+              idleClassName="w-full rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
             />
           </form>
         </div>
@@ -1762,7 +1762,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   </div>
                 </summary>
 
-                <div className="mt-3 grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
+                <div className="mt-3 grid gap-4 xl:grid-cols-[1fr_auto] xl:items-start">
                   <div className="space-y-2 text-sm">
                     <p><span className="font-semibold">Order #:</span> {orderNumber}</p>
                     <p><span className="font-semibold">Phone:</span> {order.customer_phone ?? "N/A"}</p>
@@ -1771,6 +1771,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                     <p><span className="font-semibold">File:</span> {order.design_path}</p>
                     <p><span className="font-semibold">Placed:</span> {formatDateTime(order.created_at)}</p>
                     <p><span className="font-semibold">Paid:</span> {formatDateTime(order.paid_at)}</p>
+                    {parsedNotes.fulfillmentMethod ? (
+                      <p>
+                        <span className="font-semibold">Fulfillment:</span> {parsedNotes.fulfillmentMethod}
+                      </p>
+                    ) : null}
                     {order.archived_at ? (
                       <p>
                         <span className="font-semibold">Archived:</span> {formatDateTime(order.archived_at)}
@@ -1794,9 +1799,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                       </div>
                     ) : null}
                   </div>
-                  <div className="space-y-3 md:text-right">
+                  <div className="space-y-3">
                     {order.fileLink ? (
-                      <a href={order.fileLink} target="_blank" rel="noreferrer" className="inline-flex rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white">Download Upload</a>
+                      <a href={order.fileLink} target="_blank" rel="noreferrer" className="inline-flex w-full justify-center rounded-md border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white sm:w-auto">Download Upload</a>
                     ) : (<p className="text-xs text-red-700">Upload link unavailable</p>)}
                     {canPrintLabel ? (
                       <PrintOrderLabelButton
@@ -1808,7 +1813,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                         createdAt={order.created_at}
                       />
                     ) : null}
-                    <form action={updateOrderStatus} className="grid gap-2 md:grid-cols-[160px_1fr_auto] md:items-center md:justify-end">
+                    <form action={updateOrderStatus} className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_auto] sm:items-center">
                       <input type="hidden" name="orderId" value={order.id} />
                       <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
                       <select
@@ -1827,27 +1832,27 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                         placeholder="Fulfillment note (drop-off + time)"
                         className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
                       />
-                      <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-xs font-semibold text-white">Save</button>
+                      <button type="submit" className="w-full rounded-md bg-rose px-3 py-2 text-xs font-semibold text-white sm:w-auto">Save</button>
                     </form>
                     {order.archived_at ? (
-                      <form action={unarchiveOrder} className="md:ml-auto md:w-fit">
+                      <form action={unarchiveOrder} className="w-full sm:w-fit">
                         <input type="hidden" name="orderId" value={order.id} />
                         <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
                         <button
                           type="submit"
-                          className="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
+                          className="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface sm:w-auto"
                         >
                           Unarchive
                         </button>
                       </form>
                     ) : isArchivableOrderStatus(order.status) ? (
-                      <form action={archiveOrder} className="md:ml-auto md:w-fit">
+                      <form action={archiveOrder} className="w-full sm:w-fit">
                         <input type="hidden" name="orderId" value={order.id} />
                         <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
                         <AdminConfirmSubmitButton
                           buttonLabel="Archive Order"
                           confirmMessage="Archive this fulfilled/completed/cancelled order?"
-                          idleClassName="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
+                          idleClassName="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface sm:w-auto"
                         />
                       </form>
                     ) : null}

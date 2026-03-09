@@ -7,6 +7,7 @@ type FulfillmentEntry = {
 
 type ParsedFulfillmentNotes = {
   bodyNotes: string | null;
+  fulfillmentMethod: string | null;
   entries: FulfillmentEntry[];
 };
 
@@ -16,16 +17,25 @@ function normalizeLineBreaks(value: string): string {
 
 export function parseFulfillmentNotes(notes: string | null): ParsedFulfillmentNotes {
   if (!notes) {
-    return { bodyNotes: null, entries: [] };
+    return { bodyNotes: null, fulfillmentMethod: null, entries: [] };
   }
 
   const bodyLines: string[] = [];
   const entries: FulfillmentEntry[] = [];
+  let fulfillmentMethod: string | null = null;
 
   const normalized = normalizeLineBreaks(notes);
   for (const line of normalized.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed.startsWith(FULFILLMENT_NOTE_PREFIX)) {
+      if (trimmed.startsWith("Cart items:")) {
+        continue;
+      }
+      if (trimmed.startsWith("Fulfillment:")) {
+        const methodText = trimmed.slice("Fulfillment:".length).trim();
+        fulfillmentMethod = methodText || null;
+        continue;
+      }
       bodyLines.push(line);
       continue;
     }
@@ -48,6 +58,7 @@ export function parseFulfillmentNotes(notes: string | null): ParsedFulfillmentNo
   const compactBody = bodyLines.join("\n").trim();
   return {
     bodyNotes: compactBody ? compactBody : null,
+    fulfillmentMethod,
     entries,
   };
 }

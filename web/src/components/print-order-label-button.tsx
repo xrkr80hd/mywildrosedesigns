@@ -56,7 +56,7 @@ export function PrintOrderLabelButton({
       return;
     }
 
-    const logoUrl = `${window.location.origin}/assets/img/MyWRDLogo.png`;
+    const logoUrl = `${window.location.origin}/assets/img/WRD_hero.png`;
     const printWindow = window.open("", "_blank", "noopener,noreferrer,width=980,height=760");
     if (!printWindow) {
       window.alert("Unable to open print window. Please allow popups and try again.");
@@ -192,18 +192,18 @@ export function PrintOrderLabelButton({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
         <button
           type="button"
           onClick={printLabel}
-          className="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+          className="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white sm:w-auto"
         >
           Print Item Label
         </button>
         <button
           type="button"
           onClick={() => setShowEditor((previous) => !previous)}
-          className="rounded-xl border border-rose/35 bg-white px-3 py-2 text-xs font-semibold text-rose hover:bg-rose/10"
+          className="w-full rounded-md border border-rose/35 bg-white px-3 py-2 text-xs font-semibold text-rose hover:bg-rose/10 sm:w-auto"
         >
           Edit Label?
         </button>
