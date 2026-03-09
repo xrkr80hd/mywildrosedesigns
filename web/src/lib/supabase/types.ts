@@ -10,6 +10,7 @@ export type OrderStatus =
   | "pending_payment"
   | "paid"
   | "in_production"
+  | "fulfilled"
   | "completed"
   | "cancelled";
 

@@ -4,17 +4,19 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
+import { appendFulfillmentNote } from "@/lib/fulfillment-notes";
 import { recordSaleMovementsForOrder } from "@/lib/order-sales";
 import { DEFAULT_PRODUCT_OPTIONS } from "@/lib/product-options";
 import { isSiteSettingTitle, saveSiteContentValues } from "@/lib/site-content";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const CONTACT_STATUS_VALUES = ["new", "in_progress", "resolved"] as const;
-const ARCHIVABLE_ORDER_STATUSES = ["completed", "cancelled"] as const;
+const ARCHIVABLE_ORDER_STATUSES = ["fulfilled", "completed", "cancelled"] as const;
 
 const updateStatusSchema = z.object({
   orderId: z.string().uuid(),
   status: z.enum(ORDER_STATUS_VALUES),
+  fulfillmentNote: z.string().trim().max(500).optional(),
 });
 
 const orderArchiveSchema = z.object({
@@ -577,6 +579,7 @@ export async function updateOrderStatus(formData: FormData) {
   const parsed = updateStatusSchema.safeParse({
     orderId: formData.get("orderId"),
     status: formData.get("status"),
+    fulfillmentNote: nullableText(formData.get("fulfillmentNote")) ?? undefined,
   });
 
   if (!parsed.success) {
@@ -584,16 +587,42 @@ export async function updateOrderStatus(formData: FormData) {
   }
 
   const supabase = getSupabaseAdminClient();
+  let nextNotes: string | undefined;
+  if (parsed.data.fulfillmentNote) {
+    const orderResult = await supabase
+      .from("orders")
+      .select("notes")
+      .eq("id", parsed.data.orderId)
+      .maybeSingle();
+
+    if (orderResult.error) {
+      return redirectAdminError("save_failed", redirectTo);
+    }
+
+    const existingNotes =
+      orderResult.data && typeof orderResult.data.notes === "string"
+        ? orderResult.data.notes
+        : null;
+    nextNotes = appendFulfillmentNote(existingNotes, parsed.data.fulfillmentNote);
+  }
+
+  const updatePayload: { status: (typeof ORDER_STATUS_VALUES)[number]; notes?: string } = {
+    status: parsed.data.status,
+  };
+  if (nextNotes) {
+    updatePayload.notes = nextNotes;
+  }
+
   const updateResult = await supabase
     .from("orders")
-    .update({ status: parsed.data.status })
+    .update(updatePayload)
     .eq("id", parsed.data.orderId);
 
   if (updateResult.error) {
     return redirectAdminError("save_failed", redirectTo);
   }
 
-  if (["paid", "in_production", "completed"].includes(parsed.data.status)) {
+  if (["paid", "in_production", "fulfilled", "completed"].includes(parsed.data.status)) {
     try {
       await recordSaleMovementsForOrder(parsed.data.orderId, "admin_status");
     } catch {

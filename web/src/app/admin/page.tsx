@@ -4,7 +4,9 @@ import type { ReactNode } from "react";
 import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
 import { AdminConfirmSubmitButton } from "@/components/admin-confirm-submit-button";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
+import { PrintOrderLabelButton } from "@/components/print-order-label-button";
 import { ShareProductButton } from "@/components/share-product-button";
+import { parseFulfillmentNotes } from "@/lib/fulfillment-notes";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import type { ProductOptionAdminRow } from "@/lib/product-options-store";
 import { getUploadProductOptionsForAdmin } from "@/lib/product-options-store";
@@ -39,7 +41,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const CONTACT_STATUS_VALUES = ["new", "in_progress", "resolved"] as const;
-type OrderView = "active" | "archived" | "all";
+type OrderView = "active" | "fulfilled" | "archived" | "all";
 
 type AdminPageProps = {
   searchParams?: Promise<{
@@ -248,6 +250,8 @@ function orderStatusBadgeClass(status: string): string {
       return "bg-emerald-50 text-emerald-700";
     case "in_production":
       return "bg-blue-50 text-blue-700";
+    case "fulfilled":
+      return "bg-violet-50 text-violet-700";
     case "completed":
       return "bg-zinc-100 text-zinc-700";
     case "cancelled":
@@ -271,7 +275,23 @@ function messageStatusBadgeClass(status: ContactMessageRow["status"]): string {
 }
 
 function isArchivableOrderStatus(status: string): boolean {
-  return status === "completed" || status === "cancelled";
+  return status === "fulfilled" || status === "completed" || status === "cancelled";
+}
+
+function formatOrderStatusLabel(status: string): string {
+  return status
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function formatOrderNumber(orderId: string, createdAt: string): string {
+  const date = new Date(createdAt);
+  const ymd = Number.isNaN(date.getTime())
+    ? "00000000"
+    : date.toISOString().slice(0, 10).replaceAll("-", "");
+  const token = orderId.replaceAll("-", "").slice(0, 8).toUpperCase();
+  return `WRD-${ymd}-${token}`;
 }
 
 function isMissingTableError(error: unknown, tableName: string): boolean {
@@ -356,8 +376,10 @@ async function getOrders(orderView: OrderView): Promise<OrderWithFileLink[]> {
   const filteredRows =
     orderView === "archived"
       ? rows.filter((order) => Boolean(order.archived_at))
+      : orderView === "fulfilled"
+        ? rows.filter((order) => !order.archived_at && order.status === "fulfilled")
       : orderView === "active"
-        ? rows.filter((order) => !order.archived_at)
+        ? rows.filter((order) => !order.archived_at && order.status !== "fulfilled")
         : rows;
 
   const bucket = getUploadBucket();
@@ -693,6 +715,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const orderView: OrderView =
     normalizedOrderView === "archived"
       ? "archived"
+      : normalizedOrderView === "fulfilled"
+        ? "fulfilled"
       : normalizedOrderView === "all"
         ? "all"
         : "active";
@@ -1628,7 +1652,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             </p>
           </div>
           <div className="w-full rounded-2xl border border-forest/20 bg-white/80 p-1.5 shadow-sm md:w-auto">
-            <div className="grid grid-cols-3 gap-1 text-xs font-semibold">
+            <div className="grid grid-cols-2 gap-1 text-xs font-semibold sm:grid-cols-4">
               <Link
                 href={ordersViewHref("active")}
                 className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
@@ -1650,6 +1674,16 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 Archived
               </Link>
               <Link
+                href={ordersViewHref("fulfilled")}
+                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                  orderView === "fulfilled"
+                    ? "bg-forest text-white shadow-sm"
+                    : "text-forest hover:bg-forest/10"
+                }`}
+              >
+                Fulfilled
+              </Link>
+              <Link
                 href={ordersViewHref("all")}
                 className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
                   orderView === "all"
@@ -1666,8 +1700,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <form action={archiveResolvedOrders} className="w-full">
             <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
             <AdminConfirmSubmitButton
-              buttonLabel="Archive Completed/Cancelled"
-              confirmMessage="Archive all completed and cancelled orders from the active list?"
+              buttonLabel="Archive Fulfilled/Completed/Cancelled"
+              confirmMessage="Archive all fulfilled, completed, and cancelled orders from the active list?"
               idleClassName="w-full rounded-xl border border-forest/30 bg-white px-4 py-2 text-sm font-semibold text-forest hover:bg-surface"
             />
           </form>
@@ -1675,7 +1709,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
             <AdminConfirmSubmitButton
               buttonLabel="Clear Archived Orders"
-              confirmMessage="Permanently delete archived completed/cancelled orders? This cannot be undone."
+              confirmMessage="Permanently delete archived fulfilled/completed/cancelled orders? This cannot be undone."
               idleClassName="w-full rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
             />
           </form>
@@ -1686,101 +1720,142 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </p>
         ) : null}
         <div className="space-y-2">
-          {orders.map((order) => (
-            <details
-              key={order.id}
-              id={`order-${order.id}`}
-              data-admin-key={`order-${order.id}`}
-              className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
-            >
-              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-forest">
-                    {order.customer_name} • {formatUsd(order.amount_cents)}
-                  </p>
-                  <p className="text-xs text-foreground/70">
-                    {order.customer_email} • {formatDateTime(order.created_at)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}>
-                    {order.status}
-                  </span>
-                  {order.archived_at ? (
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-700">
-                      archived
-                    </span>
-                  ) : null}
-                  <span
-                    aria-hidden="true"
-                    className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
-                  >
-                    &#9662;
-                  </span>
-                </div>
-              </summary>
+          {orders.map((order) => {
+            const parsedNotes = parseFulfillmentNotes(order.notes);
+            const orderNumber = formatOrderNumber(order.id, order.created_at);
+            const canPrintLabel = ["paid", "in_production", "fulfilled", "completed"].includes(
+              order.status,
+            );
 
-              <div className="mt-3 grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
-                <div className="space-y-2 text-sm">
-                  <p><span className="font-semibold">Phone:</span> {order.customer_phone ?? "N/A"}</p>
-                  <p><span className="font-semibold">Option:</span> {order.product_option}</p>
-                  <p><span className="font-semibold">Qty:</span> {order.quantity}</p>
-                  <p><span className="font-semibold">File:</span> {order.design_path}</p>
-                  <p><span className="font-semibold">Placed:</span> {formatDateTime(order.created_at)}</p>
-                  <p><span className="font-semibold">Paid:</span> {formatDateTime(order.paid_at)}</p>
-                  {order.archived_at ? (
-                    <p>
-                      <span className="font-semibold">Archived:</span> {formatDateTime(order.archived_at)}
+            return (
+              <details
+                key={order.id}
+                id={`order-${order.id}`}
+                data-admin-key={`order-${order.id}`}
+                className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
+              >
+                <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-forest">
+                      {order.customer_name} • {formatUsd(order.amount_cents)}
                     </p>
-                  ) : null}
-                  {order.notes ? (<p><span className="font-semibold">Notes:</span> {order.notes}</p>) : null}
-                </div>
-                <div className="space-y-3 md:text-right">
-                  {order.fileLink ? (
-                    <a href={order.fileLink} target="_blank" rel="noreferrer" className="inline-flex rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white">Download Upload</a>
-                  ) : (<p className="text-xs text-red-700">Upload link unavailable</p>)}
-                  <form action={updateOrderStatus} className="flex gap-2 md:justify-end">
-                    <input type="hidden" name="orderId" value={order.id} />
-                    <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
-                    <select
-                      name="status"
-                      title="Order status"
-                      aria-label="Order status"
-                      defaultValue={order.status}
-                      className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
+                    <p className="text-xs text-foreground/70">
+                      {order.customer_email} • {formatDateTime(order.created_at)}
+                    </p>
+                    <p className="text-[11px] font-semibold text-gold">Order #{orderNumber}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}>
+                      {formatOrderStatusLabel(order.status)}
+                    </span>
+                    {order.archived_at ? (
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-700">
+                        archived
+                      </span>
+                    ) : null}
+                    <span
+                      aria-hidden="true"
+                      className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
                     >
-                      {ORDER_STATUS_VALUES.map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                    <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-xs font-semibold text-white">Save</button>
-                  </form>
-                  {order.archived_at ? (
-                    <form action={unarchiveOrder} className="md:ml-auto md:w-fit">
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
-                      <button
-                        type="submit"
-                        className="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
-                      >
-                        Unarchive
-                      </button>
-                    </form>
-                  ) : isArchivableOrderStatus(order.status) ? (
-                    <form action={archiveOrder} className="md:ml-auto md:w-fit">
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
-                      <AdminConfirmSubmitButton
-                        buttonLabel="Archive Order"
-                        confirmMessage="Archive this completed/cancelled order?"
-                        idleClassName="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
+                      &#9662;
+                    </span>
+                  </div>
+                </summary>
+
+                <div className="mt-3 grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
+                  <div className="space-y-2 text-sm">
+                    <p><span className="font-semibold">Order #:</span> {orderNumber}</p>
+                    <p><span className="font-semibold">Phone:</span> {order.customer_phone ?? "N/A"}</p>
+                    <p><span className="font-semibold">Option:</span> {order.product_option}</p>
+                    <p><span className="font-semibold">Qty:</span> {order.quantity}</p>
+                    <p><span className="font-semibold">File:</span> {order.design_path}</p>
+                    <p><span className="font-semibold">Placed:</span> {formatDateTime(order.created_at)}</p>
+                    <p><span className="font-semibold">Paid:</span> {formatDateTime(order.paid_at)}</p>
+                    {order.archived_at ? (
+                      <p>
+                        <span className="font-semibold">Archived:</span> {formatDateTime(order.archived_at)}
+                      </p>
+                    ) : null}
+                    {parsedNotes.bodyNotes ? (
+                      <p><span className="font-semibold">Notes:</span> {parsedNotes.bodyNotes}</p>
+                    ) : null}
+                    {parsedNotes.entries.length > 0 ? (
+                      <div className="rounded-xl border border-violet-200 bg-violet-50 p-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">
+                          Fulfillment Log
+                        </p>
+                        <div className="mt-1 space-y-1 text-xs text-violet-900">
+                          {parsedNotes.entries.map((entry, index) => (
+                            <p key={`${order.id}-fulfillment-${index}`}>
+                              [{entry.timestamp ? formatDateTime(entry.timestamp) : "No time"}] {entry.text}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="space-y-3 md:text-right">
+                    {order.fileLink ? (
+                      <a href={order.fileLink} target="_blank" rel="noreferrer" className="inline-flex rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white">Download Upload</a>
+                    ) : (<p className="text-xs text-red-700">Upload link unavailable</p>)}
+                    {canPrintLabel ? (
+                      <PrintOrderLabelButton
+                        orderNumber={orderNumber}
+                        customerName={order.customer_name}
+                        customerEmail={order.customer_email}
+                        productOption={order.product_option}
+                        quantity={order.quantity}
+                        createdAt={order.created_at}
                       />
+                    ) : null}
+                    <form action={updateOrderStatus} className="grid gap-2 md:grid-cols-[160px_1fr_auto] md:items-center md:justify-end">
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                      <select
+                        name="status"
+                        title="Order status"
+                        aria-label="Order status"
+                        defaultValue={order.status}
+                        className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
+                      >
+                        {ORDER_STATUS_VALUES.map((status) => (
+                          <option key={status} value={status}>{formatOrderStatusLabel(status)}</option>
+                        ))}
+                      </select>
+                      <input
+                        name="fulfillmentNote"
+                        placeholder="Fulfillment note (drop-off + time)"
+                        className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
+                      />
+                      <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-xs font-semibold text-white">Save</button>
                     </form>
-                  ) : null}
+                    {order.archived_at ? (
+                      <form action={unarchiveOrder} className="md:ml-auto md:w-fit">
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                        <button
+                          type="submit"
+                          className="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
+                        >
+                          Unarchive
+                        </button>
+                      </form>
+                    ) : isArchivableOrderStatus(order.status) ? (
+                      <form action={archiveOrder} className="md:ml-auto md:w-fit">
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                        <AdminConfirmSubmitButton
+                          buttonLabel="Archive Order"
+                          confirmMessage="Archive this fulfilled/completed/cancelled order?"
+                          idleClassName="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
+                        />
+                      </form>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            </details>
-          ))}
+              </details>
+            );
+          })}
         </div>
       </section>
     </main>
