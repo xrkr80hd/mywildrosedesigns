@@ -484,13 +484,14 @@ async function getOrCreateFallbackCategory(excludedCategoryId: string): Promise<
 }
 
 export async function updateOrderStatus(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
   const parsed = updateStatusSchema.safeParse({
     orderId: formData.get("orderId"),
     status: formData.get("status"),
   });
 
   if (!parsed.success) {
-    return redirectAdminError("invalid_payload");
+    return redirectAdminError("invalid_payload", redirectTo);
   }
 
   const supabase = getSupabaseAdminClient();
@@ -500,19 +501,19 @@ export async function updateOrderStatus(formData: FormData) {
     .eq("id", parsed.data.orderId);
 
   if (updateResult.error) {
-    return redirectAdminError("save_failed");
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   if (["paid", "in_production", "completed"].includes(parsed.data.status)) {
     try {
       await recordSaleMovementsForOrder(parsed.data.orderId, "admin_status");
     } catch {
-      return redirectAdminError("save_failed");
+      return redirectAdminError("save_failed", redirectTo);
     }
   }
 
   revalidatePath("/admin");
-  return redirectAdminSuccess("order_updated");
+  return redirectAdminSuccess("order_updated", redirectTo);
 }
 
 export async function saveUploadTransferPricing(formData: FormData) {
@@ -848,6 +849,7 @@ export async function deleteCategory(formData: FormData) {
 }
 
 export async function createProduct(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
   const parsed = createProductSchema.safeParse({
     title: formData.get("title"),
     sku: formData.get("sku") || undefined,
@@ -866,7 +868,7 @@ export async function createProduct(formData: FormData) {
   });
 
   if (!parsed.success) {
-    return redirectAdminError("invalid_payload");
+    return redirectAdminError("invalid_payload", redirectTo);
   }
 
   let sku = "";
@@ -875,7 +877,7 @@ export async function createProduct(formData: FormData) {
       ? await ensureUniqueSku(parsed.data.sku)
       : await generateCategorySku(parsed.data.categoryId, parsed.data.title);
   } catch {
-    return redirectAdminError("save_failed");
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   const supabase = getSupabaseAdminClient();
@@ -885,7 +887,7 @@ export async function createProduct(formData: FormData) {
     try {
       slug = await generateProductSlug(parsed.data.categoryId, parsed.data.title);
     } catch {
-      return redirectAdminError("save_failed");
+      return redirectAdminError("save_failed", redirectTo);
     }
 
     const insertResult = await supabase.from("products").insert({
@@ -912,21 +914,22 @@ export async function createProduct(formData: FormData) {
     }
 
     if (!isSlugConflict(insertResult.error)) {
-      return redirectAdminError("save_failed");
+      return redirectAdminError("save_failed", redirectTo);
     }
   }
 
   if (!created) {
-    return redirectAdminError("save_failed");
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   revalidatePath("/");
   revalidatePath("/shop");
   revalidatePath("/admin");
-  return redirectAdminSuccess("product_created");
+  return redirectAdminSuccess("product_created", redirectTo);
 }
 
 export async function updateProductCard(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
   const parsed = updateProductSchema.safeParse({
     productId: formData.get("productId"),
     title: formData.get("title"),
@@ -947,7 +950,7 @@ export async function updateProductCard(formData: FormData) {
   });
 
   if (!parsed.success) {
-    return redirectAdminError("invalid_payload");
+    return redirectAdminError("invalid_payload", redirectTo);
   }
 
   let sku = "";
@@ -966,7 +969,7 @@ export async function updateProductCard(formData: FormData) {
       parsed.data.productId,
     );
   } catch {
-    return redirectAdminError("save_failed");
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   const supabase = getSupabaseAdminClient();
@@ -992,13 +995,13 @@ export async function updateProductCard(formData: FormData) {
     .eq("id", parsed.data.productId);
 
   if (updateResult.error) {
-    return redirectAdminError("save_failed");
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   revalidatePath("/");
   revalidatePath("/shop");
   revalidatePath("/admin");
-  return redirectAdminSuccess("product_updated");
+  return redirectAdminSuccess("product_updated", redirectTo);
 }
 
 export async function deleteProductCard(formData: FormData) {
@@ -1325,6 +1328,7 @@ export async function savePromoPopup(formData: FormData) {
 }
 
 export async function updateContactMessage(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
   const parsed = updateMessageSchema.safeParse({
     messageId: formData.get("messageId"),
     status: formData.get("status"),
@@ -1332,7 +1336,7 @@ export async function updateContactMessage(formData: FormData) {
   });
 
   if (!parsed.success) {
-    return redirectAdminError("invalid_payload");
+    return redirectAdminError("invalid_payload", redirectTo);
   }
 
   const supabase = getSupabaseAdminClient();
@@ -1345,9 +1349,9 @@ export async function updateContactMessage(formData: FormData) {
     .eq("id", parsed.data.messageId);
 
   if (updateResult.error) {
-    return redirectAdminError("save_failed");
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   revalidatePath("/admin");
-  return redirectAdminSuccess("message_updated");
+  return redirectAdminSuccess("message_updated", redirectTo);
 }

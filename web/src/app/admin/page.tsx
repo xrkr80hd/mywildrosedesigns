@@ -220,6 +220,36 @@ function formatDateTime(value: string | null) {
   return new Date(value).toLocaleString();
 }
 
+function orderStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "pending_payment":
+      return "bg-amber-50 text-amber-700";
+    case "paid":
+      return "bg-emerald-50 text-emerald-700";
+    case "in_production":
+      return "bg-blue-50 text-blue-700";
+    case "completed":
+      return "bg-zinc-100 text-zinc-700";
+    case "cancelled":
+      return "bg-rose-50 text-rose-700";
+    default:
+      return "bg-zinc-100 text-zinc-700";
+  }
+}
+
+function messageStatusBadgeClass(status: ContactMessageRow["status"]): string {
+  switch (status) {
+    case "new":
+      return "bg-amber-50 text-amber-700";
+    case "in_progress":
+      return "bg-blue-50 text-blue-700";
+    case "resolved":
+      return "bg-emerald-50 text-emerald-700";
+    default:
+      return "bg-zinc-100 text-zinc-700";
+  }
+}
+
 function isMissingTableError(error: unknown, tableName: string): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -504,17 +534,23 @@ async function getContactMessages() {
 
 function AdminDropdownSection({
   id,
+  persistKey,
   title,
   description,
   children,
 }: {
   id?: string;
+  persistKey: string;
   title: string;
   description: string;
   children: ReactNode;
 }) {
   return (
-    <details id={id} className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5">
+    <details
+      id={id}
+      data-admin-key={persistKey}
+      className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5"
+    >
       <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl text-forest">{title}</h2>
@@ -662,6 +698,7 @@ export default async function AdminPage() {
       />
 
       <AdminDropdownSection
+        persistKey="homepage-hero"
         title="Homepage Hero"
         description="This controls the top-left copy block on the home page."
       >
@@ -701,6 +738,7 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        persistKey="promo-popup"
         title="Promotional Popup"
         description="This controls the popup modal only. It is separate from featured products and homepage feature cards."
       >
@@ -747,6 +785,7 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        persistKey="homepage-feature-cards"
         title="Homepage Feature Cards"
         description="Edit cards shown on Home under Homepage Highlights (not the popup modal)."
       >
@@ -803,6 +842,7 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        persistKey="upload-transfer-pricing"
         title="Upload Transfer Pricing"
         description="Edit custom upload transfer names, descriptions, pricing, and availability."
       >
@@ -856,6 +896,7 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        persistKey="best-sellers"
         title="Best Sellers (Internal Tracking)"
         description="Top sellers based on paid cart orders recorded in your inventory movement logs."
       >
@@ -890,6 +931,7 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        persistKey="funnel-analytics"
         title="Funnel Analytics (Last 30 Days)"
         description="Basic storefront funnel counts for product views, add-to-cart, checkout starts, and paid orders."
       >
@@ -923,14 +965,20 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        persistKey="categories"
         title="Categories"
         description="Keep this compact by editing categories in dropdown rows."
       >
-        <details className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3">
+        <details
+          id="category-create"
+          data-admin-key="category-create"
+          className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3"
+        >
           <summary className="cursor-pointer list-none text-sm font-semibold text-forest">
             Add Category
           </summary>
           <form action={createCategory} className="mt-3 grid gap-3 md:grid-cols-2">
+            <input type="hidden" name="redirectTo" value="/admin#category-create" />
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Name</span><input name="name" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span><input name="sortOrder" type="number" defaultValue={100} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
             <AdminImageUploadField
@@ -946,7 +994,12 @@ export default async function AdminPage() {
 
         <div className="mt-3 space-y-2">
           {categories.map((category) => (
-            <details key={category.id} className="rounded-xl border border-rose/20 bg-white/95 p-3">
+            <details
+              key={category.id}
+              id={`category-${category.id}`}
+              data-admin-key={`category-${category.id}`}
+              className="rounded-xl border border-rose/20 bg-white/95 p-3"
+            >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-forest">{category.name}</p>
@@ -959,6 +1012,7 @@ export default async function AdminPage() {
 
               <form action={updateCategory} className="mt-3 grid gap-3 md:grid-cols-2">
                 <input type="hidden" name="categoryId" value={category.id} />
+                <input type="hidden" name="redirectTo" value={`/admin#category-${category.id}`} />
                 <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Name</span><input name="name" defaultValue={category.name} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                 <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Slug</span><input name="slug" defaultValue={category.slug} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                 <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span><input name="sortOrder" type="number" defaultValue={category.sort_order} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
@@ -979,7 +1033,7 @@ export default async function AdminPage() {
 
               <form action={deleteCategory} className="mt-2">
                 <input type="hidden" name="categoryId" value={category.id} />
-                <input type="hidden" name="redirectTo" value="/admin" />
+                <input type="hidden" name="redirectTo" value={`/admin#category-${category.id}`} />
                 <AdminConfirmSubmitButton
                   buttonLabel="Delete Category (Keep Items)"
                   confirmMessage="Are you sure you'd like to delete this category? Items will be kept and moved to Uncategorized."
@@ -993,14 +1047,20 @@ export default async function AdminPage() {
 
       <AdminDropdownSection
         id="product-inventory"
+        persistKey="product-inventory"
         title="Product Inventory"
         description="Product cards are collapsed by default to keep the backend concise and scannable."
       >
-        <details className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3">
+        <details
+          id="product-create"
+          data-admin-key="product-create"
+          className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3"
+        >
           <summary className="cursor-pointer list-none text-sm font-semibold text-forest">
             Add New Product Card
           </summary>
           <form action={createProduct} className="mt-3 grid gap-3 md:grid-cols-2">
+            <input type="hidden" name="redirectTo" value="/admin#product-create" />
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span><input name="title" required className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Category</span><select name="categoryId" required className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm">{categories.map((category) => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></label>
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">SKU (optional override)</span><input name="sku" placeholder="Leave blank to auto-generate from category" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
@@ -1029,7 +1089,12 @@ export default async function AdminPage() {
 
         <div className="mt-3 space-y-2">
           {inventoryGroups.map((group) => (
-            <details key={group.id} className="rounded-xl border border-rose/20 bg-white/95 p-3">
+            <details
+              key={group.id}
+              id={`inventory-group-${group.id}`}
+              data-admin-key={`inventory-group-${group.id}`}
+              className="rounded-xl border border-rose/20 bg-white/95 p-3"
+            >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-forest">{group.label}</p>
@@ -1052,7 +1117,12 @@ export default async function AdminPage() {
                     const productVariantsForProduct = variantsByProductId.get(product.id) ?? [];
 
                     return (
-                      <details key={product.id} className="rounded-xl border border-rose/20 bg-white p-3">
+                      <details
+                        key={product.id}
+                        id={`product-${product.id}`}
+                        data-admin-key={`product-${product.id}`}
+                        className="rounded-xl border border-rose/20 bg-white p-3"
+                      >
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-forest">{product.title}</p>
@@ -1071,6 +1141,7 @@ export default async function AdminPage() {
 
                         <form action={updateProductCard} className="mt-3 grid gap-3 md:grid-cols-2">
                           <input type="hidden" name="productId" value={product.id} />
+                          <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span><input name="title" defaultValue={product.title} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Category</span><select name="categoryId" defaultValue={product.category_id} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm">{categories.map((category) => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></label>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">SKU</span><input name="sku" defaultValue={product.sku} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
@@ -1110,7 +1181,7 @@ export default async function AdminPage() {
 
                           <form action={createProductVariant} className="mt-3 grid gap-2 md:grid-cols-3">
                             <input type="hidden" name="productId" value={product.id} />
-                            <input type="hidden" name="redirectTo" value="/admin" />
+                            <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
                             <label className="space-y-1">
                               <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Size</span>
                               <input name="sizeValue" placeholder="S, M, L" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
@@ -1156,7 +1227,7 @@ export default async function AdminPage() {
                                   <form action={updateProductVariant} className="mt-2 grid gap-2 md:grid-cols-3">
                                     <input type="hidden" name="variantId" value={variant.id} />
                                     <input type="hidden" name="productId" value={product.id} />
-                                    <input type="hidden" name="redirectTo" value="/admin" />
+                                    <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
                                     <label className="space-y-1">
                                       <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Size</span>
                                       <input name="sizeValue" defaultValue={variant.size_value ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
@@ -1189,7 +1260,7 @@ export default async function AdminPage() {
                                   </form>
                                   <form action={deleteProductVariant} className="mt-2">
                                     <input type="hidden" name="variantId" value={variant.id} />
-                                    <input type="hidden" name="redirectTo" value="/admin" />
+                                    <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
                                     <AdminConfirmSubmitButton
                                       buttonLabel="Delete Variant"
                                       confirmMessage="Are you sure you'd like to delete this variant?"
@@ -1204,7 +1275,7 @@ export default async function AdminPage() {
 
                         <form action={deleteProductCard} className="mt-2 flex justify-end">
                           <input type="hidden" name="productId" value={product.id} />
-                          <input type="hidden" name="redirectTo" value="/admin" />
+                          <input type="hidden" name="redirectTo" value={`/admin#inventory-group-${group.id}`} />
                           <AdminConfirmSubmitButton
                             buttonLabel="Delete Product"
                             confirmMessage="Are you sure you'd like to delete this item?"
@@ -1222,72 +1293,128 @@ export default async function AdminPage() {
       </AdminDropdownSection>
 
       <section id="customer-messages" className="mt-8 space-y-4">
-        <h2 className="text-2xl text-forest">Customer Messages</h2>
-        {messages.length === 0 ? (<p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">No messages yet.</p>) : null}
-        {messages.map((message) => (
-          <article key={message.id} className="rounded-2xl border border-rose/20 bg-white/85 p-5 shadow-sm">
-            <div className="space-y-2 text-sm">
-              <p className="font-semibold text-forest">{message.subject}</p>
-              <p><span className="font-semibold">From:</span> {message.name} ({message.email})</p>
-              <p><span className="font-semibold">Sent:</span> {formatDateTime(message.created_at)}</p>
-              <p className="rounded-xl bg-surface p-3 text-foreground/85">{message.message}</p>
-            </div>
-            <form action={updateContactMessage} className="mt-3 grid gap-2 md:grid-cols-[220px_1fr_auto]">
-              <input type="hidden" name="messageId" value={message.id} />
-              <select
-                name="status"
-                title="Message status"
-                aria-label="Message status"
-                defaultValue={message.status}
-                className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
-              >
-                {CONTACT_STATUS_VALUES.map((status) => (<option key={status} value={status}>{status}</option>))}
-              </select>
-              <input name="notes" defaultValue={message.notes ?? ""} placeholder="Internal notes" className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm" />
-              <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-white">Save</button>
-            </form>
-          </article>
-        ))}
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl text-forest">Customer Messages</h2>
+          <p className="text-xs text-foreground/70">{messages.length} total</p>
+        </div>
+        {messages.length === 0 ? (
+          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">No messages yet.</p>
+        ) : null}
+        <div className="space-y-2">
+          {messages.map((message) => (
+            <details
+              key={message.id}
+              id={`message-${message.id}`}
+              data-admin-key={`message-${message.id}`}
+              className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-forest">{message.subject}</p>
+                  <p className="text-xs text-foreground/70">
+                    {message.name} ({message.email}) • {formatDateTime(message.created_at)}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${messageStatusBadgeClass(message.status)}`}>
+                  {message.status}
+                </span>
+              </summary>
+
+              <div className="mt-3 space-y-2 text-sm">
+                <p className="rounded-xl bg-surface p-3 text-foreground/85">{message.message}</p>
+              </div>
+              <form action={updateContactMessage} className="mt-3 grid gap-2 md:grid-cols-[220px_1fr_auto]">
+                <input type="hidden" name="messageId" value={message.id} />
+                <input type="hidden" name="redirectTo" value={`/admin#message-${message.id}`} />
+                <select
+                  name="status"
+                  title="Message status"
+                  aria-label="Message status"
+                  defaultValue={message.status}
+                  className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
+                >
+                  {CONTACT_STATUS_VALUES.map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+                <input
+                  name="notes"
+                  defaultValue={message.notes ?? ""}
+                  placeholder="Internal notes"
+                  className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
+                />
+                <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-white">Save</button>
+              </form>
+            </details>
+          ))}
+        </div>
       </section>
 
       <section id="orders-uploads" className="mt-8 space-y-4">
-        <h2 className="text-2xl text-forest">Orders and Uploads</h2>
-        {orders.length === 0 ? (<p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">No orders yet.</p>) : null}
-        {orders.map((order) => (
-          <article key={order.id} className="rounded-2xl border border-rose/20 bg-white/85 p-5 shadow-sm">
-            <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
-              <div className="space-y-2 text-sm">
-                <p className="font-semibold text-forest">{order.customer_name} - {formatUsd(order.amount_cents)}</p>
-                <p><span className="font-semibold">Email:</span> {order.customer_email}</p>
-                <p><span className="font-semibold">Phone:</span> {order.customer_phone ?? "N/A"}</p>
-                <p><span className="font-semibold">Option:</span> {order.product_option}</p>
-                <p><span className="font-semibold">Qty:</span> {order.quantity}</p>
-                <p><span className="font-semibold">File:</span> {order.design_path}</p>
-                <p><span className="font-semibold">Placed:</span> {formatDateTime(order.created_at)}</p>
-                <p><span className="font-semibold">Paid:</span> {formatDateTime(order.paid_at)}</p>
-                {order.notes ? (<p><span className="font-semibold">Notes:</span> {order.notes}</p>) : null}
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl text-forest">Orders and Uploads</h2>
+          <p className="text-xs text-foreground/70">{orders.length} total</p>
+        </div>
+        {orders.length === 0 ? (
+          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">No orders yet.</p>
+        ) : null}
+        <div className="space-y-2">
+          {orders.map((order) => (
+            <details
+              key={order.id}
+              id={`order-${order.id}`}
+              data-admin-key={`order-${order.id}`}
+              className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-forest">
+                    {order.customer_name} • {formatUsd(order.amount_cents)}
+                  </p>
+                  <p className="text-xs text-foreground/70">
+                    {order.customer_email} • {formatDateTime(order.created_at)}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}>
+                  {order.status}
+                </span>
+              </summary>
+
+              <div className="mt-3 grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
+                <div className="space-y-2 text-sm">
+                  <p><span className="font-semibold">Phone:</span> {order.customer_phone ?? "N/A"}</p>
+                  <p><span className="font-semibold">Option:</span> {order.product_option}</p>
+                  <p><span className="font-semibold">Qty:</span> {order.quantity}</p>
+                  <p><span className="font-semibold">File:</span> {order.design_path}</p>
+                  <p><span className="font-semibold">Placed:</span> {formatDateTime(order.created_at)}</p>
+                  <p><span className="font-semibold">Paid:</span> {formatDateTime(order.paid_at)}</p>
+                  {order.notes ? (<p><span className="font-semibold">Notes:</span> {order.notes}</p>) : null}
+                </div>
+                <div className="space-y-3 md:text-right">
+                  {order.fileLink ? (
+                    <a href={order.fileLink} target="_blank" rel="noreferrer" className="inline-flex rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white">Download Upload</a>
+                  ) : (<p className="text-xs text-red-700">Upload link unavailable</p>)}
+                  <form action={updateOrderStatus} className="flex gap-2 md:justify-end">
+                    <input type="hidden" name="orderId" value={order.id} />
+                    <input type="hidden" name="redirectTo" value={`/admin#order-${order.id}`} />
+                    <select
+                      name="status"
+                      title="Order status"
+                      aria-label="Order status"
+                      defaultValue={order.status}
+                      className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
+                    >
+                      {ORDER_STATUS_VALUES.map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                    <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-xs font-semibold text-white">Save</button>
+                  </form>
+                </div>
               </div>
-              <div className="space-y-3 md:text-right">
-                {order.fileLink ? (
-                  <a href={order.fileLink} target="_blank" rel="noreferrer" className="inline-flex rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white">Download Upload</a>
-                ) : (<p className="text-xs text-red-700">Upload link unavailable</p>)}
-                <form action={updateOrderStatus} className="flex gap-2 md:justify-end">
-                  <input type="hidden" name="orderId" value={order.id} />
-                  <select
-                    name="status"
-                    title="Order status"
-                    aria-label="Order status"
-                    defaultValue={order.status}
-                    className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
-                  >
-                    {ORDER_STATUS_VALUES.map((status) => (<option key={status} value={status}>{status}</option>))}
-                  </select>
-                  <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-xs font-semibold text-white">Save</button>
-                </form>
-              </div>
-            </div>
-          </article>
-        ))}
+            </details>
+          ))}
+        </div>
       </section>
     </main>
   );

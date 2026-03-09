@@ -62,7 +62,8 @@ export function AdminActionToast() {
       nextParams.delete("toast");
       nextParams.delete("error");
       const nextQuery = nextParams.toString();
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+      const hash = window.location.hash ?? "";
+      router.replace(nextQuery ? `${pathname}?${nextQuery}${hash}` : `${pathname}${hash}`, { scroll: false });
     }, 3000);
 
     return () => {
