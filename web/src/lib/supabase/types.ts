@@ -36,6 +36,8 @@ export type Database = {
           stripe_checkout_session_id: string | null;
           stripe_payment_intent_id: string | null;
           paid_at: string | null;
+          archived_at: string | null;
+          archived_by: string | null;
         };
         Insert: {
           id?: string;
@@ -53,6 +55,8 @@ export type Database = {
           stripe_checkout_session_id?: string | null;
           stripe_payment_intent_id?: string | null;
           paid_at?: string | null;
+          archived_at?: string | null;
+          archived_by?: string | null;
         };
         Update: {
           id?: string;
@@ -70,6 +74,8 @@ export type Database = {
           stripe_checkout_session_id?: string | null;
           stripe_payment_intent_id?: string | null;
           paid_at?: string | null;
+          archived_at?: string | null;
+          archived_by?: string | null;
         };
         Relationships: [];
       };

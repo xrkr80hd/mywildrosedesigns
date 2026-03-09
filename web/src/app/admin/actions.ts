@@ -10,10 +10,15 @@ import { isSiteSettingTitle, saveSiteContentValues } from "@/lib/site-content";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const CONTACT_STATUS_VALUES = ["new", "in_progress", "resolved"] as const;
+const ARCHIVABLE_ORDER_STATUSES = ["completed", "cancelled"] as const;
 
 const updateStatusSchema = z.object({
   orderId: z.string().uuid(),
   status: z.enum(ORDER_STATUS_VALUES),
+});
+
+const orderArchiveSchema = z.object({
+  orderId: z.string().uuid(),
 });
 
 const homepageSchema = z.object({
@@ -374,6 +379,10 @@ function isMissingColumnError(error: unknown, columnName: string): boolean {
     (haystack.includes(columnName.toLowerCase()) && haystack.includes("does not exist"));
 }
 
+function isArchivableStatus(status: string): status is (typeof ARCHIVABLE_ORDER_STATUSES)[number] {
+  return (ARCHIVABLE_ORDER_STATUSES as readonly string[]).includes(status);
+}
+
 async function ensureUniqueSlug(
   table: "categories" | "products",
   baseValue: string,
@@ -514,6 +523,135 @@ export async function updateOrderStatus(formData: FormData) {
 
   revalidatePath("/admin");
   return redirectAdminSuccess("order_updated", redirectTo);
+}
+
+export async function archiveOrder(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = orderArchiveSchema.safeParse({
+    orderId: formData.get("orderId"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const orderResult = await supabase
+    .from("orders")
+    .select("id, status, archived_at")
+    .eq("id", parsed.data.orderId)
+    .maybeSingle();
+
+  if (orderResult.error) {
+    if (isMissingColumnError(orderResult.error, "archived_at")) {
+      return redirectAdminError("order_archive_schema_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const order = orderResult.data as { id: string; status: string; archived_at: string | null } | null;
+  if (!order) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  if (!isArchivableStatus(order.status)) {
+    return redirectAdminError("order_archive_not_eligible", redirectTo);
+  }
+
+  if (order.archived_at) {
+    return redirectAdminSuccess("order_archived", redirectTo);
+  }
+
+  const archiveResult = await supabase
+    .from("orders")
+    .update({
+      archived_at: new Date().toISOString(),
+      archived_by: "admin_ui",
+    })
+    .eq("id", parsed.data.orderId);
+
+  if (archiveResult.error) {
+    if (isMissingColumnError(archiveResult.error, "archived_at")) {
+      return redirectAdminError("order_archive_schema_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/admin");
+  return redirectAdminSuccess("order_archived", redirectTo);
+}
+
+export async function unarchiveOrder(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = orderArchiveSchema.safeParse({
+    orderId: formData.get("orderId"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const updateResult = await supabase
+    .from("orders")
+    .update({
+      archived_at: null,
+      archived_by: null,
+    })
+    .eq("id", parsed.data.orderId);
+
+  if (updateResult.error) {
+    if (isMissingColumnError(updateResult.error, "archived_at")) {
+      return redirectAdminError("order_archive_schema_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/admin");
+  return redirectAdminSuccess("order_unarchived", redirectTo);
+}
+
+export async function archiveResolvedOrders(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const supabase = getSupabaseAdminClient();
+  const archiveResult = await supabase
+    .from("orders")
+    .update({
+      archived_at: new Date().toISOString(),
+      archived_by: "admin_bulk",
+    })
+    .in("status", [...ARCHIVABLE_ORDER_STATUSES])
+    .is("archived_at", null);
+
+  if (archiveResult.error) {
+    if (isMissingColumnError(archiveResult.error, "archived_at")) {
+      return redirectAdminError("order_archive_schema_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/admin");
+  return redirectAdminSuccess("orders_archived", redirectTo);
+}
+
+export async function clearArchivedOrders(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const supabase = getSupabaseAdminClient();
+  const clearResult = await supabase
+    .from("orders")
+    .delete()
+    .in("status", [...ARCHIVABLE_ORDER_STATUSES])
+    .not("archived_at", "is", null);
+
+  if (clearResult.error) {
+    if (isMissingColumnError(clearResult.error, "archived_at")) {
+      return redirectAdminError("order_archive_schema_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/admin");
+  return redirectAdminSuccess("archived_orders_cleared", redirectTo);
 }
 
 export async function saveUploadTransferPricing(formData: FormData) {

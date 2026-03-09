@@ -10,6 +10,9 @@ import { getUploadProductOptionsForAdmin } from "@/lib/product-options-store";
 import { getUploadBucket } from "@/lib/env";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
+  archiveOrder,
+  archiveResolvedOrders,
+  clearArchivedOrders,
   createCategory,
   createProduct,
   createProductVariant,
@@ -21,6 +24,7 @@ import {
   saveHomepageSettings,
   saveUploadTransferPricing,
   savePromoPopup,
+  unarchiveOrder,
   updateCategory,
   updateContactMessage,
   updateOrderStatus,
@@ -32,6 +36,13 @@ import {
 export const dynamic = "force-dynamic";
 
 const CONTACT_STATUS_VALUES = ["new", "in_progress", "resolved"] as const;
+type OrderView = "active" | "archived" | "all";
+
+type AdminPageProps = {
+  searchParams?: Promise<{
+    orderView?: string | string[];
+  }>;
+};
 
 type OrderRow = {
   id: string;
@@ -46,6 +57,8 @@ type OrderRow = {
   notes: string | null;
   design_path: string;
   paid_at: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
 };
 
 type CategoryRow = {
@@ -250,6 +263,10 @@ function messageStatusBadgeClass(status: ContactMessageRow["status"]): string {
   }
 }
 
+function isArchivableOrderStatus(status: string): boolean {
+  return status === "completed" || status === "cancelled";
+}
+
 function isMissingTableError(error: unknown, tableName: string): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -260,30 +277,86 @@ function isMissingTableError(error: unknown, tableName: string): boolean {
   return candidate.code === "42P01" || text.includes(tableName.toLowerCase());
 }
 
+function isMissingColumnError(error: unknown, columnName: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: string; message?: string; details?: string };
+  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return candidate.code === "42703" ||
+    (text.includes(columnName.toLowerCase()) && text.includes("does not exist"));
+}
+
 function formatVariantLabel(variant: ProductVariantRow): string {
   const parts = [variant.size_value, variant.color_value].filter(Boolean);
   return parts.join(" • ") || "Default option";
 }
 
-async function getOrders(): Promise<OrderWithFileLink[]> {
+async function getOrders(orderView: OrderView): Promise<OrderWithFileLink[]> {
   const supabase = getSupabaseAdminClient();
-  const orderResult = await supabase
+  let includeArchiveColumns = true;
+  let orderRows: Array<Partial<OrderRow>> = [];
+
+  const primaryResult = await supabase
     .from("orders")
     .select(
-      "id, created_at, customer_name, customer_email, customer_phone, product_option, quantity, amount_cents, status, notes, design_path, paid_at",
+      "id, created_at, customer_name, customer_email, customer_phone, product_option, quantity, amount_cents, status, notes, design_path, paid_at, archived_at, archived_by",
     )
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(400);
 
-  if (orderResult.error) {
-    return [];
+  if (primaryResult.error && isMissingColumnError(primaryResult.error, "archived_at")) {
+    includeArchiveColumns = false;
+    const fallbackResult = await supabase
+      .from("orders")
+      .select(
+        "id, created_at, customer_name, customer_email, customer_phone, product_option, quantity, amount_cents, status, notes, design_path, paid_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(400);
+
+    if (fallbackResult.error) {
+      return [];
+    }
+    orderRows = (fallbackResult.data ?? []) as Array<Partial<OrderRow>>;
+  } else {
+    if (primaryResult.error) {
+      return [];
+    }
+    orderRows = (primaryResult.data ?? []) as Array<Partial<OrderRow>>;
   }
 
-  const rows = (orderResult.data ?? []) as OrderRow[];
+  const rows = orderRows.map((order) => ({
+    id: String(order.id ?? ""),
+    created_at: String(order.created_at ?? ""),
+    customer_name: String(order.customer_name ?? ""),
+    customer_email: String(order.customer_email ?? ""),
+    customer_phone: order.customer_phone ? String(order.customer_phone) : null,
+    product_option: String(order.product_option ?? ""),
+    quantity: Number(order.quantity ?? 0),
+    amount_cents: Number(order.amount_cents ?? 0),
+    status: String(order.status ?? ""),
+    notes: order.notes ? String(order.notes) : null,
+    design_path: String(order.design_path ?? ""),
+    paid_at: order.paid_at ? String(order.paid_at) : null,
+    archived_at:
+      includeArchiveColumns && order.archived_at ? String(order.archived_at) : null,
+    archived_by:
+      includeArchiveColumns && order.archived_by ? String(order.archived_by) : null,
+  })) as OrderRow[];
+
+  const filteredRows =
+    orderView === "archived"
+      ? rows.filter((order) => Boolean(order.archived_at))
+      : orderView === "active"
+        ? rows.filter((order) => !order.archived_at)
+        : rows;
+
   const bucket = getUploadBucket();
 
   return Promise.all(
-    rows.map(async (order) => {
+    filteredRows.map(async (order) => {
       const signedResult = await supabase.storage
         .from(bucket)
         .createSignedUrl(order.design_path, 60 * 60 * 24);
@@ -294,6 +367,43 @@ async function getOrders(): Promise<OrderWithFileLink[]> {
       };
     }),
   );
+}
+
+async function getOrderAttentionSummary() {
+  const supabase = getSupabaseAdminClient();
+  let rows: Array<{ id: string }> = [];
+
+  const primaryResult = await supabase
+    .from("orders")
+    .select("id, status, archived_at, created_at")
+    .in("status", ["pending_payment", "paid"])
+    .is("archived_at", null)
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (primaryResult.error && isMissingColumnError(primaryResult.error, "archived_at")) {
+    const fallbackResult = await supabase
+      .from("orders")
+      .select("id, status, created_at")
+      .in("status", ["pending_payment", "paid"])
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (fallbackResult.error) {
+      return { newOrderCount: 0, latestOrderId: null as string | null };
+    }
+    rows = (fallbackResult.data ?? []) as Array<{ id: string }>;
+  } else {
+    if (primaryResult.error) {
+      return { newOrderCount: 0, latestOrderId: null as string | null };
+    }
+    rows = (primaryResult.data ?? []) as Array<{ id: string }>;
+  }
+
+  return {
+    newOrderCount: rows.length,
+    latestOrderId: rows[0]?.id ?? null,
+  };
 }
 
 async function getCategories() {
@@ -565,9 +675,21 @@ function AdminDropdownSection({
   );
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: AdminPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const viewParam = resolvedSearchParams?.orderView;
+  const rawOrderView = Array.isArray(viewParam) ? viewParam[0] : viewParam;
+  const normalizedOrderView = (rawOrderView ?? "").trim().toLowerCase();
+  const orderView: OrderView =
+    normalizedOrderView === "archived"
+      ? "archived"
+      : normalizedOrderView === "all"
+        ? "all"
+        : "active";
+
   const [
     orders,
+    orderAttention,
     categories,
     products,
     productVariants,
@@ -580,7 +702,8 @@ export default async function AdminPage() {
     funnelEvents,
   ] =
     await Promise.all([
-      getOrders(),
+      getOrders(orderView),
+      getOrderAttentionSummary(),
       getCategories(),
       getProducts(),
       getProductVariants(),
@@ -613,9 +736,8 @@ export default async function AdminPage() {
 
   const newMessageCount = messages.filter((message) => message.status === "new").length;
   const latestMessageId = messages.find((message) => message.status === "new")?.id ?? null;
-  const actionableOrderStatuses = new Set(["pending_payment", "paid"]);
-  const newOrderCount = orders.filter((order) => actionableOrderStatuses.has(order.status)).length;
-  const latestOrderId = orders.find((order) => actionableOrderStatuses.has(order.status))?.id ?? null;
+  const newOrderCount = orderAttention.newOrderCount;
+  const latestOrderId = orderAttention.latestOrderId;
   const bestSellerRows = buildBestSellerRows(products, saleMovements);
   const funnelSummary = buildFunnelSummary(funnelEvents);
   const variantsByProductId = new Map<string, ProductVariantRow[]>();
@@ -624,6 +746,14 @@ export default async function AdminPage() {
     existing.push(variant);
     variantsByProductId.set(variant.product_id, existing);
   }
+  const orderViewBasePath =
+    orderView === "active" ? "/admin" : `/admin?orderView=${orderView}`;
+  const ordersViewHref = (nextView: OrderView) =>
+    nextView === "active"
+      ? "/admin#orders-uploads"
+      : `/admin?orderView=${nextView}#orders-uploads`;
+  const orderRedirectTo = (orderId?: string) =>
+    `${orderViewBasePath}${orderId ? `#order-${orderId}` : "#orders-uploads"}`;
 
   return (
     <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-6 py-10">
@@ -1325,7 +1455,7 @@ export default async function AdminPage() {
               </div>
               <form action={updateContactMessage} className="mt-3 grid gap-2 md:grid-cols-[220px_1fr_auto]">
                 <input type="hidden" name="messageId" value={message.id} />
-                <input type="hidden" name="redirectTo" value={`/admin#message-${message.id}`} />
+                <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#message-${message.id}`} />
                 <select
                   name="status"
                   title="Message status"
@@ -1352,11 +1482,67 @@ export default async function AdminPage() {
 
       <section id="orders-uploads" className="mt-8 space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl text-forest">Orders and Uploads</h2>
-          <p className="text-xs text-foreground/70">{orders.length} total</p>
+          <div>
+            <h2 className="text-2xl text-forest">Orders and Uploads</h2>
+            <p className="text-xs text-foreground/70">
+              {orders.length} shown ({orderView})
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            <Link
+              href={ordersViewHref("active")}
+              className={`rounded-xl border px-3 py-1.5 ${
+                orderView === "active"
+                  ? "border-forest bg-forest text-white"
+                  : "border-forest/20 bg-white text-forest"
+              }`}
+            >
+              Active
+            </Link>
+            <Link
+              href={ordersViewHref("archived")}
+              className={`rounded-xl border px-3 py-1.5 ${
+                orderView === "archived"
+                  ? "border-forest bg-forest text-white"
+                  : "border-forest/20 bg-white text-forest"
+              }`}
+            >
+              Archived
+            </Link>
+            <Link
+              href={ordersViewHref("all")}
+              className={`rounded-xl border px-3 py-1.5 ${
+                orderView === "all"
+                  ? "border-forest bg-forest text-white"
+                  : "border-forest/20 bg-white text-forest"
+              }`}
+            >
+              All
+            </Link>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <form action={archiveResolvedOrders}>
+            <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
+            <AdminConfirmSubmitButton
+              buttonLabel="Archive Completed/Cancelled"
+              confirmMessage="Archive all completed and cancelled orders from the active list?"
+              idleClassName="rounded-xl border border-forest/30 bg-white px-3 py-1.5 text-xs font-semibold text-forest hover:bg-surface"
+            />
+          </form>
+          <form action={clearArchivedOrders}>
+            <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
+            <AdminConfirmSubmitButton
+              buttonLabel="Clear Archived Orders"
+              confirmMessage="Permanently delete archived completed/cancelled orders? This cannot be undone."
+              idleClassName="rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+            />
+          </form>
         </div>
         {orders.length === 0 ? (
-          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">No orders yet.</p>
+          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
+            No orders in this view yet.
+          </p>
         ) : null}
         <div className="space-y-2">
           {orders.map((order) => (
@@ -1375,9 +1561,16 @@ export default async function AdminPage() {
                     {order.customer_email} • {formatDateTime(order.created_at)}
                   </p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}>
-                  {order.status}
-                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}>
+                    {order.status}
+                  </span>
+                  {order.archived_at ? (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-700">
+                      archived
+                    </span>
+                  ) : null}
+                </div>
               </summary>
 
               <div className="mt-3 grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
@@ -1388,6 +1581,11 @@ export default async function AdminPage() {
                   <p><span className="font-semibold">File:</span> {order.design_path}</p>
                   <p><span className="font-semibold">Placed:</span> {formatDateTime(order.created_at)}</p>
                   <p><span className="font-semibold">Paid:</span> {formatDateTime(order.paid_at)}</p>
+                  {order.archived_at ? (
+                    <p>
+                      <span className="font-semibold">Archived:</span> {formatDateTime(order.archived_at)}
+                    </p>
+                  ) : null}
                   {order.notes ? (<p><span className="font-semibold">Notes:</span> {order.notes}</p>) : null}
                 </div>
                 <div className="space-y-3 md:text-right">
@@ -1396,7 +1594,7 @@ export default async function AdminPage() {
                   ) : (<p className="text-xs text-red-700">Upload link unavailable</p>)}
                   <form action={updateOrderStatus} className="flex gap-2 md:justify-end">
                     <input type="hidden" name="orderId" value={order.id} />
-                    <input type="hidden" name="redirectTo" value={`/admin#order-${order.id}`} />
+                    <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
                     <select
                       name="status"
                       title="Order status"
@@ -1410,6 +1608,28 @@ export default async function AdminPage() {
                     </select>
                     <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-xs font-semibold text-white">Save</button>
                   </form>
+                  {order.archived_at ? (
+                    <form action={unarchiveOrder} className="md:ml-auto md:w-fit">
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                      <button
+                        type="submit"
+                        className="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
+                      >
+                        Unarchive
+                      </button>
+                    </form>
+                  ) : isArchivableOrderStatus(order.status) ? (
+                    <form action={archiveOrder} className="md:ml-auto md:w-fit">
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                      <AdminConfirmSubmitButton
+                        buttonLabel="Archive Order"
+                        confirmMessage="Archive this completed/cancelled order?"
+                        idleClassName="rounded-xl border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface"
+                      />
+                    </form>
+                  ) : null}
                 </div>
               </div>
             </details>
