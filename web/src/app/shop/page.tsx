@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { AddToCartButton } from "@/components/add-to-cart-button";
 import { ShareProductButton } from "@/components/share-product-button";
 import { getStorefrontData } from "@/lib/storefront";
 
@@ -100,7 +101,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                     className="h-48 w-full rounded-xl border border-rose/15 bg-surface object-contain p-4"
                   />
                   <h3 className="mt-3 text-lg text-forest">{product.title}</h3>
-                  <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="mt-2">
                     <p className="text-lg font-bold text-rose">
                       {product.hasVariants ? "From " : ""}
                       ${(product.effectivePriceCents / 100).toFixed(2)}
@@ -110,15 +111,32 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                         </span>
                       ) : null}
                     </p>
-                    <div className="flex items-center gap-2">
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/shop/${product.slug}`}
+                      className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                    >
+                      View Item
+                    </Link>
+                    {product.hasVariants ? (
                       <Link
                         href={`/shop/${product.slug}`}
-                        className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                        className="rounded-xl bg-rose px-4 py-2 text-xs font-semibold text-white hover:bg-rose/90"
                       >
-                        View Item
+                        {product.cartCtaText || "Add to Cart"}
                       </Link>
-                      <ShareProductButton path={`/shop/${product.slug}`} title={product.title} />
-                    </div>
+                    ) : (
+                      <AddToCartButton
+                        id={product.id}
+                        title={product.title}
+                        price={product.effectivePriceCents / 100}
+                        productSlug={product.slug}
+                        label={product.cartCtaText}
+                        className="rounded-xl bg-rose px-4 py-2 text-xs font-semibold text-white hover:bg-rose/90"
+                      />
+                    )}
+                    <ShareProductButton path={`/shop/${product.slug}`} title={product.title} />
                   </div>
                 </article>
               ))}

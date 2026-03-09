@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { CART_KEY, buildCartLineId, sanitizeCartItems } from "@/lib/cart";
 import { trackFunnelEvent } from "@/lib/funnel-tracking";
 
@@ -34,6 +35,20 @@ export function AddToCartButton({
   onAdded,
 }: AddToCartButtonProps) {
   const [added, setAdded] = useState(false);
+  const [showViewCart, setShowViewCart] = useState(false);
+  const addedTimerRef = useRef<number | null>(null);
+  const viewCartTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (addedTimerRef.current != null) {
+        window.clearTimeout(addedTimerRef.current);
+      }
+      if (viewCartTimerRef.current != null) {
+        window.clearTimeout(viewCartTimerRef.current);
+      }
+    };
+  }, []);
 
   function handleAdd() {
     if (disabled) {
@@ -73,22 +88,44 @@ export function AddToCartButton({
         variantColor: variantColor ?? null,
       },
     });
+
+    if (addedTimerRef.current != null) {
+      window.clearTimeout(addedTimerRef.current);
+    }
+    if (viewCartTimerRef.current != null) {
+      window.clearTimeout(viewCartTimerRef.current);
+    }
+
     setAdded(true);
+    setShowViewCart(true);
     onAdded?.();
-    window.setTimeout(() => setAdded(false), 1000);
+    addedTimerRef.current = window.setTimeout(() => setAdded(false), 1000);
+    viewCartTimerRef.current = window.setTimeout(() => setShowViewCart(false), 4500);
   }
 
+  const fullWidth = className?.includes("w-full") ?? false;
+
   return (
-    <button
-      type="button"
-      onClick={handleAdd}
-      disabled={disabled}
-      className={
-        className ??
-        "rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose/90 disabled:cursor-not-allowed disabled:opacity-70"
-      }
-    >
-      {added ? addedLabel : label}
-    </button>
+    <div className={fullWidth ? "flex w-full flex-wrap items-center gap-2" : "inline-flex items-center gap-2"}>
+      <button
+        type="button"
+        onClick={handleAdd}
+        disabled={disabled}
+        className={
+          className ??
+          "rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose/90 disabled:cursor-not-allowed disabled:opacity-70"
+        }
+      >
+        {added ? addedLabel : label}
+      </button>
+      {showViewCart ? (
+        <Link
+          href="/cart"
+          className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+        >
+          View Cart
+        </Link>
+      ) : null}
+    </div>
   );
 }
