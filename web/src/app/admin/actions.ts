@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import { recordSaleMovementsForOrder } from "@/lib/order-sales";
-import { DEFAULT_PRODUCT_OPTIONS, PRODUCT_OPTION_IDS } from "@/lib/product-options";
+import { DEFAULT_PRODUCT_OPTIONS } from "@/lib/product-options";
 import { isSiteSettingTitle, saveSiteContentValues } from "@/lib/site-content";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -191,13 +191,30 @@ const updateMessageSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 
+const transferOptionIdSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9-]{2,80}$/);
+
 const uploadProductOptionSchema = z.object({
-  id: z.enum(PRODUCT_OPTION_IDS),
+  id: transferOptionIdSchema,
+  sortOrder: z.coerce.number().int().min(0).max(100_000),
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().min(2).max(300),
   amountCents: z.coerce.number().int().min(100).max(500_000),
   active: z.boolean(),
 });
+
+const createUploadProductOptionSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().min(2).max(300),
+  amountCents: z.coerce.number().int().min(100).max(500_000),
+  sortOrder: z.coerce.number().int().min(0).max(100_000),
+  active: z.boolean(),
+});
+
+const deleteUploadProductOptionSchema = z.object({
+  optionId: transferOptionIdSchema,
+});
+
+const DEFAULT_TRANSFER_OPTION_IDS = new Set(DEFAULT_PRODUCT_OPTIONS.map((option) => option.id));
 
 function asBool(formData: FormData, key: string): boolean {
   return formData.get(key) === "on";
@@ -210,6 +227,14 @@ function nullableText(value: FormDataEntryValue | null): string | null {
 
 function readUploadOptionField(formData: FormData, field: string, optionId: string) {
   return formData.get(`${field}_${optionId}`);
+}
+
+function readUploadOptionIds(formData: FormData): string[] {
+  const rawIds = formData
+    .getAll("optionIds")
+    .map((value) => String(value ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  return Array.from(new Set(rawIds));
 }
 
 function resolveAdminRedirectTarget(formData: FormData, fallback = "/admin"): string {
@@ -248,6 +273,38 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
   return slug || "item";
+}
+
+function normalizeTransferOptionId(value: string): string {
+  return slugify(value).slice(0, 80);
+}
+
+async function buildUniqueUploadOptionId(name: string): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+  const base = normalizeTransferOptionId(name);
+  const root = base.startsWith("custom-") ? base : `custom-${base}`;
+
+  let candidate = root;
+  let counter = 1;
+
+  while (true) {
+    const existingResult = await supabase
+      .from("upload_product_options")
+      .select("id")
+      .eq("id", candidate)
+      .maybeSingle();
+
+    if (existingResult.error) {
+      throw new Error(existingResult.error.message);
+    }
+
+    if (!existingResult.data?.id) {
+      return candidate;
+    }
+
+    counter += 1;
+    candidate = `${root}-${counter}`;
+  }
 }
 
 function normalizeSku(value: string): string {
@@ -654,43 +711,111 @@ export async function clearArchivedOrders(formData: FormData) {
   return redirectAdminSuccess("archived_orders_cleared", redirectTo);
 }
 
+export async function createUploadTransferOption(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = createUploadProductOptionSchema.safeParse({
+    name: formData.get("name"),
+    description: formData.get("description"),
+    amountCents: formData.get("amountCents"),
+    sortOrder: formData.get("sortOrder"),
+    active: asBool(formData, "active"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  let optionId = "";
+  try {
+    optionId = await buildUniqueUploadOptionId(parsed.data.name);
+  } catch {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const insertResult = await supabase.from("upload_product_options").insert({
+    id: optionId,
+    sort_order: parsed.data.sortOrder,
+    name: parsed.data.name,
+    description: parsed.data.description,
+    amount_cents: parsed.data.amountCents,
+    active: parsed.data.active,
+  });
+
+  if (insertResult.error) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/upload");
+  revalidatePath("/admin");
+  return redirectAdminSuccess("transfer_option_created", redirectTo);
+}
+
+export async function deleteUploadTransferOption(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = deleteUploadProductOptionSchema.safeParse({
+    optionId: formData.get("optionId"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  if (DEFAULT_TRANSFER_OPTION_IDS.has(parsed.data.optionId)) {
+    return redirectAdminError("transfer_option_default_locked", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const deleteResult = await supabase
+    .from("upload_product_options")
+    .delete()
+    .eq("id", parsed.data.optionId);
+
+  if (deleteResult.error) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/upload");
+  revalidatePath("/admin");
+  return redirectAdminSuccess("transfer_option_deleted", redirectTo);
+}
+
 export async function saveUploadTransferPricing(formData: FormData) {
-  const parsedOptions = DEFAULT_PRODUCT_OPTIONS.map((option) =>
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const optionIds = readUploadOptionIds(formData);
+  if (optionIds.length === 0) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const parsedOptions = optionIds.map((optionId, index) =>
     uploadProductOptionSchema.safeParse({
-      id: option.id,
-      name: readUploadOptionField(formData, "name", option.id),
-      description: readUploadOptionField(formData, "description", option.id),
-      amountCents: readUploadOptionField(formData, "amountCents", option.id),
-      active: asBool(formData, `active_${option.id}`),
+      id: optionId,
+      sortOrder: readUploadOptionField(formData, "sortOrder", optionId) ?? (index + 1) * 10,
+      name: readUploadOptionField(formData, "name", optionId),
+      description: readUploadOptionField(formData, "description", optionId),
+      amountCents: readUploadOptionField(formData, "amountCents", optionId),
+      active: asBool(formData, `active_${optionId}`),
     }),
   );
 
   if (parsedOptions.some((result) => !result.success)) {
-    return redirectAdminError("invalid_payload");
+    return redirectAdminError("invalid_payload", redirectTo);
   }
 
-  const rows: Array<{
-    id: string;
-    sort_order: number;
-    name: string;
-    description: string;
-    amount_cents: number;
-    active: boolean;
-  }> = [];
-  for (const [index, result] of parsedOptions.entries()) {
-    if (!result.success) {
-      continue;
-    }
-
-    rows.push({
-      id: result.data.id,
-      sort_order: (index + 1) * 10,
-      name: result.data.name,
-      description: result.data.description,
-      amount_cents: result.data.amountCents,
-      active: result.data.active,
-    });
-  }
+  const rows = parsedOptions.flatMap((result) =>
+    result.success
+      ? [
+          {
+            id: result.data.id,
+            sort_order: result.data.sortOrder,
+            name: result.data.name,
+            description: result.data.description,
+            amount_cents: result.data.amountCents,
+            active: result.data.active,
+          },
+        ]
+      : [],
+  );
 
   const supabase = getSupabaseAdminClient();
   const writeResult = await supabase.from("upload_product_options").upsert(rows, {
@@ -698,12 +823,12 @@ export async function saveUploadTransferPricing(formData: FormData) {
   });
 
   if (writeResult.error) {
-    return redirectAdminError("save_failed");
+    return redirectAdminError("save_failed", redirectTo);
   }
 
   revalidatePath("/upload");
   revalidatePath("/admin");
-  return redirectAdminSuccess("transfer_pricing_saved");
+  return redirectAdminSuccess("transfer_pricing_saved", redirectTo);
 }
 
 export async function saveHomepageSettings(formData: FormData) {

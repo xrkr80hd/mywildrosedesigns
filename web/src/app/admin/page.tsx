@@ -13,9 +13,11 @@ import {
   archiveOrder,
   archiveResolvedOrders,
   clearArchivedOrders,
+  createUploadTransferOption,
   createCategory,
   createProduct,
   createProductVariant,
+  deleteUploadTransferOption,
   createWelcomePost,
   deleteCategory,
   deleteProductCard,
@@ -972,17 +974,81 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       </AdminDropdownSection>
 
       <AdminDropdownSection
+        id="upload-transfer-pricing"
         persistKey="upload-transfer-pricing"
         title="Upload Transfer Pricing"
         description="Edit custom upload transfer names, descriptions, pricing, and availability."
       >
+        <form
+          action={createUploadTransferOption}
+          className="mt-4 grid gap-3 rounded-2xl border border-rose/20 bg-white p-4 md:grid-cols-2"
+        >
+          <input type="hidden" name="redirectTo" value="/admin#upload-transfer-pricing" />
+          <label className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">New Option Name</span>
+            <input
+              name="name"
+              placeholder="Custom Transfer"
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span>
+            <input
+              name="amountCents"
+              type="number"
+              min={100}
+              defaultValue={2500}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="space-y-1 md:col-span-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span>
+            <textarea
+              name="description"
+              rows={2}
+              placeholder="Describe this transfer option."
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span>
+            <input
+              name="sortOrder"
+              type="number"
+              defaultValue={100}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+            <input type="checkbox" name="active" defaultChecked />
+            Option active
+          </label>
+          <div className="md:col-span-2">
+            <button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">
+              Add Custom Transfer
+            </button>
+          </div>
+        </form>
+
         <form action={saveUploadTransferPricing} className="mt-4 space-y-3">
+          <input type="hidden" name="redirectTo" value="/admin#upload-transfer-pricing" />
           {uploadOptions.map((option: ProductOptionAdminRow) => (
             <article key={option.id} className="rounded-2xl border border-rose/20 bg-white p-4">
+              <input type="hidden" name="optionIds" value={option.id} />
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
                 {option.id}
               </p>
               <div className="mt-2 grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span>
+                  <input
+                    name={`sortOrder_${option.id}`}
+                    type="number"
+                    defaultValue={option.sortOrder}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
                 <label className="space-y-1">
                   <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Name</span>
                   <input
@@ -1014,6 +1080,20 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   <input type="checkbox" name={`active_${option.id}`} defaultChecked={option.active} />
                   Option active
                 </label>
+                {option.id.startsWith("custom-") ? (
+                  <div className="flex items-center justify-between gap-2 md:col-span-2">
+                    <p className="text-xs font-semibold text-foreground/70">Custom option</p>
+                    <button
+                      type="submit"
+                      name="optionId"
+                      value={option.id}
+                      formAction={deleteUploadTransferOption}
+                      className="rounded-lg border border-rose/35 px-3 py-1.5 text-xs font-semibold text-rose hover:bg-rose/10"
+                    >
+                      Delete option
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </article>
           ))}

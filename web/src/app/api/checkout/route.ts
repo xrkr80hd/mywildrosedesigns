@@ -4,7 +4,6 @@ import {
   normalizeOptionalText,
 } from "@/lib/checkout-schema";
 import { getSiteUrl, getUploadBucket, hasStripeSecretKey } from "@/lib/env";
-import { PRODUCT_OPTION_IDS } from "@/lib/product-options";
 import { getUploadProductOptionById } from "@/lib/product-options-store";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -79,7 +78,7 @@ export async function POST(request: Request) {
     }
 
     const selectedOption = await getUploadProductOptionById(parsedPayload.data.productOptionId);
-    if (!selectedOption || !PRODUCT_OPTION_IDS.includes(selectedOption.id)) {
+    if (!selectedOption) {
       return NextResponse.json({ error: "Invalid product option." }, { status: 400 });
     }
 

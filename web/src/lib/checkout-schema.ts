@@ -1,11 +1,10 @@
 import { z } from "zod";
-import { PRODUCT_OPTION_IDS } from "@/lib/product-options";
 
 export const checkoutRequestSchema = z.object({
   customerName: z.string().trim().min(2).max(120),
   customerEmail: z.string().trim().email(),
   customerPhone: z.string().trim().max(30).optional(),
-  productOptionId: z.enum(PRODUCT_OPTION_IDS),
+  productOptionId: z.string().trim().min(1).max(120),
   quantity: z.coerce.number().int().min(1).max(25),
   notes: z.string().trim().max(2000).optional(),
 });

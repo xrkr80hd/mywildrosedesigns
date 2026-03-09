@@ -4,8 +4,6 @@ import { unstable_noStore as noStore } from "next/cache";
 import {
   DEFAULT_PRODUCT_OPTIONS,
   ProductOption,
-  ProductOptionId,
-  isProductOptionId,
 } from "@/lib/product-options";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -37,6 +35,10 @@ function isValidAmountCents(value: number): boolean {
   return Number.isInteger(value) && value > 0 && value <= 1_000_000;
 }
 
+function isValidOptionId(value: string): boolean {
+  return /^[a-z0-9-]{2,80}$/.test(value);
+}
+
 function defaultAdminRows(): ProductOptionAdminRow[] {
   return DEFAULT_PRODUCT_OPTIONS.map((option, index) => ({
     ...option,
@@ -55,7 +57,8 @@ function toPublicOption(option: ProductOptionAdminRow): ProductOption {
 }
 
 function normalizeRow(row: ProductOptionRow): ProductOptionAdminRow | null {
-  if (!isProductOptionId(row.id)) {
+  const normalizedId = String(row.id ?? "").trim().toLowerCase();
+  if (!isValidOptionId(normalizedId)) {
     return null;
   }
 
@@ -64,7 +67,7 @@ function normalizeRow(row: ProductOptionRow): ProductOptionAdminRow | null {
   }
 
   return {
-    id: row.id as ProductOptionId,
+    id: normalizedId,
     name: String(row.name ?? "").trim() || "Custom Transfer",
     description: String(row.description ?? "").trim() || "Custom transfer option.",
     amountCents: row.amount_cents,
@@ -104,8 +107,12 @@ export async function getUploadProductOptionsForAdmin(): Promise<ProductOptionAd
   }
 
   const byId = new Map(normalized.map((row) => [row.id, row]));
-  const merged = defaults.map((fallback) => byId.get(fallback.id) ?? fallback);
-  merged.sort((a, b) => a.sortOrder - b.sortOrder);
+  const mergedDefaults = defaults.map((fallback) => byId.get(fallback.id) ?? fallback);
+  const customRows = normalized.filter(
+    (row) => !defaults.some((fallback) => fallback.id === row.id),
+  );
+  const merged = [...mergedDefaults, ...customRows];
+  merged.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   return merged;
 }
 
@@ -122,10 +129,11 @@ export async function getUploadProductOptions(): Promise<ProductOption[]> {
 export async function getUploadProductOptionById(
   optionId: string,
 ): Promise<ProductOption | undefined> {
-  if (!isProductOptionId(optionId)) {
+  const normalizedId = optionId.trim().toLowerCase();
+  if (!isValidOptionId(normalizedId)) {
     return undefined;
   }
 
   const options = await getUploadProductOptions();
-  return options.find((option) => option.id === optionId);
+  return options.find((option) => option.id === normalizedId);
 }
