@@ -1001,12 +1001,13 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span>
             <input
               name="amountCents"
               type="number"
-              min={100}
-              defaultValue={2500}
+              min={1}
+              step={0.01}
+              defaultValue="25.00"
               className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
             />
           </label>
@@ -1066,12 +1067,13 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span>
                   <input
                     name={`amountCents_${option.id}`}
                     type="number"
-                    min={100}
-                    defaultValue={option.amountCents}
+                    min={1}
+                    step={0.01}
+                    defaultValue={formatUsdInput(option.amountCents)}
                     className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
                   />
                 </label>

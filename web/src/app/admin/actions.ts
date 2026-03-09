@@ -103,6 +103,11 @@ const currencyCentsSchema = z.preprocess(
   z.number().int().min(1).max(1_000_000),
 );
 
+const uploadOptionAmountCentsSchema = z.preprocess(
+  (value) => parseCurrencyToCents(value),
+  z.number().int().min(100).max(500_000),
+);
+
 const createProductSchema = z.object({
   title: z.string().trim().min(2).max(180),
   sku: z.string().trim().max(40).optional(),
@@ -211,14 +216,14 @@ const uploadProductOptionSchema = z.object({
   sortOrder: z.coerce.number().int().min(0).max(100_000),
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().min(2).max(300),
-  amountCents: z.coerce.number().int().min(100).max(500_000),
+  amountCents: uploadOptionAmountCentsSchema,
   active: z.boolean(),
 });
 
 const createUploadProductOptionSchema = z.object({
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().min(2).max(300),
-  amountCents: z.coerce.number().int().min(100).max(500_000),
+  amountCents: uploadOptionAmountCentsSchema,
   sortOrder: z.coerce.number().int().min(0).max(100_000),
   active: z.boolean(),
 });
