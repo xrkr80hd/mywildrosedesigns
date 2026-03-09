@@ -155,6 +155,22 @@ h4 {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
 }
 
+.admin-expand-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 0.18s ease,
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+details[open] > .admin-expand-summary .admin-expand-caret {
+  transform: rotate(180deg);
+  background-color: rgba(159, 59, 85, 0.18);
+  color: #7d1f3b;
+}
+
 .admin-toast-wrap {
   position: fixed;
   left: 50%;

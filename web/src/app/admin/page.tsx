@@ -668,12 +668,15 @@ function AdminDropdownSection({
       data-admin-key={persistKey}
       className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5"
     >
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+      <summary className="admin-expand-summary flex cursor-pointer list-none items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl text-forest">{title}</h2>
           <p className="mt-1 text-sm text-foreground/70">{description}</p>
         </div>
-        <span className="mt-1 rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900">
+        <span
+          aria-hidden="true"
+          className="admin-expand-caret mt-1 rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+        >
           &#9662;
         </span>
       </summary>
@@ -1189,8 +1192,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           data-admin-key="category-create"
           className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3"
         >
-          <summary className="cursor-pointer list-none text-sm font-semibold text-forest">
-            Add Category
+          <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-forest">
+            <span>Add Category</span>
+            <span
+              aria-hidden="true"
+              className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+            >
+              &#9662;
+            </span>
           </summary>
           <form action={createCategory} className="mt-3 grid gap-3 md:grid-cols-2">
             <input type="hidden" name="redirectTo" value="/admin#category-create" />
@@ -1215,14 +1224,22 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               data-admin-key={`category-${category.id}`}
               className="rounded-xl border border-rose/20 bg-white/95 p-3"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-forest">{category.name}</p>
                   <p className="text-xs text-foreground/70">/{category.slug} | Sort {category.sort_order}</p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${category.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
-                  {category.active ? "Active" : "Hidden"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${category.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                    {category.active ? "Active" : "Hidden"}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                  >
+                    &#9662;
+                  </span>
+                </div>
               </summary>
 
               <form action={updateCategory} className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1271,8 +1288,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           data-admin-key="product-create"
           className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3"
         >
-          <summary className="cursor-pointer list-none text-sm font-semibold text-forest">
-            Add New Product Card
+          <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-forest">
+            <span>Add New Product Card</span>
+            <span
+              aria-hidden="true"
+              className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+            >
+              &#9662;
+            </span>
           </summary>
           <form action={createProduct} className="mt-3 grid gap-3 md:grid-cols-2">
             <input type="hidden" name="redirectTo" value="/admin#product-create" />
@@ -1310,14 +1333,17 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               data-admin-key={`inventory-group-${group.id}`}
               className="rounded-xl border border-rose/20 bg-white/95 p-3"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-forest">{group.label}</p>
                   <p className="text-xs text-foreground/70">
                     {group.items.length} item{group.items.length === 1 ? "" : "s"}
                   </p>
                 </div>
-                <span className="rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900">
+                <span
+                  aria-hidden="true"
+                  className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                >
                   &#9662;
                 </span>
               </summary>
@@ -1338,19 +1364,25 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                         data-admin-key={`product-${product.id}`}
                         className="rounded-xl border border-rose/20 bg-white p-3"
                       >
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                        <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-forest">{product.title}</p>
                             <p className="text-xs text-foreground/70">
                               {formatUsd(product.price_cents)} | Stock {product.stock_on_hand}
                             </p>
                           </div>
-                          <div className="flex flex-wrap gap-1 text-[11px] font-semibold">
+                          <div className="flex flex-wrap items-center gap-1 text-[11px] font-semibold">
                             <span className={`rounded-full px-2 py-0.5 ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
                               {product.active ? "Active" : "Hidden"}
                             </span>
                             {product.is_featured ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Featured</span> : null}
                             {product.is_hot ? <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700">Hot</span> : null}
+                            <span
+                              aria-hidden="true"
+                              className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                            >
+                              &#9662;
+                            </span>
                           </div>
                         </summary>
 
@@ -1535,16 +1567,24 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               data-admin-key={`message-${message.id}`}
               className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-forest">{message.subject}</p>
                   <p className="text-xs text-foreground/70">
                     {message.name} ({message.email}) • {formatDateTime(message.created_at)}
                   </p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${messageStatusBadgeClass(message.status)}`}>
-                  {message.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${messageStatusBadgeClass(message.status)}`}>
+                    {message.status}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                  >
+                    &#9662;
+                  </span>
+                </div>
               </summary>
 
               <div className="mt-3 space-y-2 text-sm">
@@ -1649,7 +1689,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               data-admin-key={`order-${order.id}`}
               className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-forest">
                     {order.customer_name} • {formatUsd(order.amount_cents)}
@@ -1667,6 +1707,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                       archived
                     </span>
                   ) : null}
+                  <span
+                    aria-hidden="true"
+                    className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                  >
+                    &#9662;
+                  </span>
                 </div>
               </summary>
 
