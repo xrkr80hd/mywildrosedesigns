@@ -1,5 +1,6 @@
 ﻿import Image from "next/image";
 import Link from "next/link";
+import { MobileSiteNav } from "@/components/mobile-site-nav";
 import { getSiteContentSettings } from "@/lib/site-content";
 
 const navLinks = [
@@ -16,7 +17,7 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-rose/20 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-[80] border-b border-rose/20 bg-white/90 backdrop-blur md:static md:z-auto">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:gap-4 sm:px-6">
           <Link href="/" className="group inline-flex min-w-0 flex-1 items-center gap-3">
             <Image
@@ -48,26 +49,7 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          <details className="relative ml-auto md:hidden">
-            <summary className="flex shrink-0 cursor-pointer list-none items-center gap-2 border border-rose/25 bg-white px-3 py-2 text-sm font-semibold text-forest">
-              Menu
-              <span aria-hidden>☰</span>
-            </summary>
-            <nav
-              className="absolute right-0 top-[calc(100%+0.5rem)] z-40 w-[min(13rem,calc(100vw-2rem))] rounded-2xl border border-rose/20 bg-white p-2 shadow-xl"
-              aria-label="Mobile navigation"
-            >
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-forest hover:border-rose hover:bg-surface-strong"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          </details>
+          <MobileSiteNav links={navLinks} />
         </div>
       </header>
 

@@ -44,6 +44,23 @@ export function HotItemPopup({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const autoDismissTimer = window.setTimeout(() => {
+      setIsOpen(false);
+      window.setTimeout(() => {
+        setIsDismissed(true);
+      }, 260);
+    }, 10_000);
+
+    return () => {
+      window.clearTimeout(autoDismissTimer);
+    };
+  }, [isOpen]);
+
   function handleDismiss() {
     setIsOpen(false);
     window.setTimeout(() => {
