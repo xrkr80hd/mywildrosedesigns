@@ -79,13 +79,37 @@ const updateCategorySchema = z.object({
   active: z.boolean(),
 });
 
+function parseCurrencyToCents(value: unknown): number | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return undefined;
+  }
+
+  const normalized = text.replace(/[$,\s]/g, "");
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) {
+    return Number.NaN;
+  }
+
+  return Math.round(parsed * 100);
+}
+
+const currencyCentsSchema = z.preprocess(
+  (value) => parseCurrencyToCents(value),
+  z.number().int().min(1).max(1_000_000),
+);
+
 const createProductSchema = z.object({
   title: z.string().trim().min(2).max(180),
   sku: z.string().trim().max(40).optional(),
   description: z.string().trim().max(2000),
   categoryId: z.string().uuid(),
   imageUrl: z.string().trim().max(2048).optional(),
-  priceCents: z.coerce.number().int().min(1).max(1_000_000),
+  priceCents: currencyCentsSchema,
   stockOnHand: z.coerce.number().int().min(0).max(1_000_000),
   isFeatured: z.boolean(),
   isHot: z.boolean(),
@@ -104,7 +128,7 @@ const updateProductSchema = z.object({
   description: z.string().trim().max(2000),
   categoryId: z.string().uuid(),
   imageUrl: z.string().trim().max(2048).optional(),
-  priceCents: z.coerce.number().int().min(1).max(1_000_000),
+  priceCents: currencyCentsSchema,
   stockOnHand: z.coerce.number().int().min(0).max(1_000_000),
   isFeatured: z.boolean(),
   isHot: z.boolean(),
@@ -141,18 +165,7 @@ const deleteCategorySchema = z.object({
 });
 
 const optionalPriceOverrideSchema = z.preprocess(
-  (value) => {
-    if (value === null || value === undefined) {
-      return undefined;
-    }
-
-    const text = String(value).trim();
-    if (!text) {
-      return undefined;
-    }
-
-    return Number(text);
-  },
+  (value) => parseCurrencyToCents(value),
   z.number().int().min(1).max(1_000_000).optional(),
 );
 

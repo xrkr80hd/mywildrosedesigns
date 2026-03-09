@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { AddToCartButton } from "@/components/add-to-cart-button";
 import { HotItemPopup } from "@/components/hot-item-popup";
+import { ShareProductButton } from "@/components/share-product-button";
 import { getStorefrontData } from "@/lib/storefront";
 
 const steps = [
@@ -176,22 +177,25 @@ export default async function Home() {
                     ) : null}
                   </p>
                 </div>
-                {product.hasVariants ? (
-                  <Link
-                    href={`/shop/${product.slug}`}
-                    className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
-                  >
-                    Choose Options
-                  </Link>
-                ) : (
-                  <AddToCartButton
-                    id={product.id}
-                    title={product.title}
-                    price={product.effectivePriceCents / 100}
-                    productSlug={product.slug}
-                    label={product.cartCtaText}
-                  />
-                )}
+                <div className="flex items-center gap-2">
+                  {product.hasVariants ? (
+                    <Link
+                      href={`/shop/${product.slug}`}
+                      className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                    >
+                      Choose Options
+                    </Link>
+                  ) : (
+                    <AddToCartButton
+                      id={product.id}
+                      title={product.title}
+                      price={product.effectivePriceCents / 100}
+                      productSlug={product.slug}
+                      label={product.cartCtaText}
+                    />
+                  )}
+                  <ShareProductButton path={`/shop/${product.slug}`} title={product.title} />
+                </div>
               </div>
             </article>
           ))}

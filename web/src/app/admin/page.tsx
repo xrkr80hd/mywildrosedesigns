@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
 import { AdminConfirmSubmitButton } from "@/components/admin-confirm-submit-button";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
+import { ShareProductButton } from "@/components/share-product-button";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import type { ProductOptionAdminRow } from "@/lib/product-options-store";
 import { getUploadProductOptionsForAdmin } from "@/lib/product-options-store";
@@ -225,6 +226,10 @@ function formatUsd(amountCents: number) {
     style: "currency",
     currency: "USD",
   }).format(amountCents / 100);
+}
+
+function formatUsdInput(amountCents: number) {
+  return (amountCents / 100).toFixed(2);
 }
 
 function formatDateTime(value: string | null) {
@@ -1282,7 +1287,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               recommendedSize="1200 x 1200 px"
               helperText="Drag and drop a product image, or click Choose Image to upload."
             />
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span><input name="priceCents" required type="number" defaultValue={2500} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span><input name="priceCents" required type="number" min={0.01} step={0.01} defaultValue="25.00" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Stock</span><input name="stockOnHand" required type="number" defaultValue={25} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Percent Off</span><input name="salePercentOff" type="number" min={0} max={90} defaultValue={0} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
             <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Label</span><input name="saleLabel" required defaultValue="Sale" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
@@ -1349,6 +1354,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                           </div>
                         </summary>
 
+                        <div className="mt-2 flex justify-end">
+                          <ShareProductButton
+                            path={`/shop/${product.slug}`}
+                            title={product.title}
+                            label="Share Item Link"
+                            className="rounded-xl border border-forest/20 bg-white px-3 py-1.5 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                          />
+                        </div>
+
                         <form action={updateProductCard} className="mt-3 grid gap-3 md:grid-cols-2">
                           <input type="hidden" name="productId" value={product.id} />
                           <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
@@ -1364,7 +1378,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                             recommendedSize="1200 x 1200 px"
                             helperText="Drop a replacement image here or upload one, then save this card."
                           />
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (cents)</span><input name="priceCents" type="number" defaultValue={product.price_cents} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span><input name="priceCents" type="number" min={0.01} step={0.01} defaultValue={formatUsdInput(product.price_cents)} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Stock</span><input name="stockOnHand" type="number" defaultValue={product.stock_on_hand} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Percent Off</span><input name="salePercentOff" type="number" min={0} max={90} defaultValue={product.sale_percent_off} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
                           <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Label</span><input name="saleLabel" defaultValue={product.sale_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
@@ -1405,8 +1419,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                               <input name="sku" placeholder="WR-TSHIRT-BLK-M" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
                             </label>
                             <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (cents)</span>
-                              <input name="priceOverrideCents" type="number" min={1} placeholder="Optional" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (USD)</span>
+                              <input name="priceOverrideCents" type="number" min={0.01} step={0.01} placeholder="Optional (e.g. 22.00)" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
                             </label>
                             <label className="space-y-1">
                               <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Stock</span>
@@ -1451,8 +1465,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                                       <input name="sku" defaultValue={variant.sku ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
                                     </label>
                                     <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (cents)</span>
-                                      <input name="priceOverrideCents" type="number" min={1} defaultValue={variant.price_override_cents ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (USD)</span>
+                                      <input name="priceOverrideCents" type="number" min={0.01} step={0.01} defaultValue={variant.price_override_cents != null ? formatUsdInput(variant.price_override_cents) : ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
                                     </label>
                                     <label className="space-y-1">
                                       <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Stock</span>

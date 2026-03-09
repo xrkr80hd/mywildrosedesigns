@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductDetailPurchase } from "@/components/product-detail-purchase";
 import { ProductViewTracker } from "@/components/product-view-tracker";
+import { ShareProductButton } from "@/components/share-product-button";
 import { getSiteUrl } from "@/lib/env";
 import { getStorefrontData } from "@/lib/storefront";
 
@@ -144,12 +145,15 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema) }}
       />
 
-      <Link
-        href="/shop"
-        className="inline-flex rounded-xl border border-rose/30 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-surface"
-      >
-        Back to Shop
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          href="/shop"
+          className="inline-flex rounded-xl border border-rose/30 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-surface"
+        >
+          Back to Shop
+        </Link>
+        <ShareProductButton path={`/shop/${product.slug}`} title={product.title} />
+      </div>
 
       <section className="mt-4 grid gap-6 rounded-3xl border border-rose/20 bg-white/90 p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="rounded-2xl border border-rose/15 bg-surface p-4">

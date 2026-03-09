@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { ShareProductButton } from "@/components/share-product-button";
 import { getStorefrontData } from "@/lib/storefront";
 
 type ShopPageProps = {
@@ -109,12 +110,15 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                         </span>
                       ) : null}
                     </p>
-                    <Link
-                      href={`/shop/${product.slug}`}
-                      className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
-                    >
-                      View Item
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/shop/${product.slug}`}
+                        className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                      >
+                        View Item
+                      </Link>
+                      <ShareProductButton path={`/shop/${product.slug}`} title={product.title} />
+                    </div>
                   </div>
                 </article>
               ))}
