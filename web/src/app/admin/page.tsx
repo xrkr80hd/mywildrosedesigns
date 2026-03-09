@@ -1620,61 +1620,63 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       </section>
 
       <section id="orders-uploads" className="mt-8 space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-2xl text-forest">Orders and Uploads</h2>
             <p className="text-xs text-foreground/70">
               {orders.length} shown ({orderView})
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs font-semibold">
-            <Link
-              href={ordersViewHref("active")}
-              className={`rounded-xl border px-3 py-1.5 ${
-                orderView === "active"
-                  ? "border-forest bg-forest text-white"
-                  : "border-forest/20 bg-white text-forest"
-              }`}
-            >
-              Active
-            </Link>
-            <Link
-              href={ordersViewHref("archived")}
-              className={`rounded-xl border px-3 py-1.5 ${
-                orderView === "archived"
-                  ? "border-forest bg-forest text-white"
-                  : "border-forest/20 bg-white text-forest"
-              }`}
-            >
-              Archived
-            </Link>
-            <Link
-              href={ordersViewHref("all")}
-              className={`rounded-xl border px-3 py-1.5 ${
-                orderView === "all"
-                  ? "border-forest bg-forest text-white"
-                  : "border-forest/20 bg-white text-forest"
-              }`}
-            >
-              All
-            </Link>
+          <div className="w-full rounded-2xl border border-forest/20 bg-white/80 p-1.5 shadow-sm md:w-auto">
+            <div className="grid grid-cols-3 gap-1 text-xs font-semibold">
+              <Link
+                href={ordersViewHref("active")}
+                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                  orderView === "active"
+                    ? "bg-forest text-white shadow-sm"
+                    : "text-forest hover:bg-forest/10"
+                }`}
+              >
+                Active
+              </Link>
+              <Link
+                href={ordersViewHref("archived")}
+                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                  orderView === "archived"
+                    ? "bg-forest text-white shadow-sm"
+                    : "text-forest hover:bg-forest/10"
+                }`}
+              >
+                Archived
+              </Link>
+              <Link
+                href={ordersViewHref("all")}
+                className={`flex h-9 items-center justify-center rounded-xl px-4 transition ${
+                  orderView === "all"
+                    ? "bg-forest text-white shadow-sm"
+                    : "text-forest hover:bg-forest/10"
+                }`}
+              >
+                All
+              </Link>
+            </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <form action={archiveResolvedOrders}>
+        <div className="grid gap-2 md:grid-cols-2">
+          <form action={archiveResolvedOrders} className="w-full">
             <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
             <AdminConfirmSubmitButton
               buttonLabel="Archive Completed/Cancelled"
               confirmMessage="Archive all completed and cancelled orders from the active list?"
-              idleClassName="rounded-xl border border-forest/30 bg-white px-3 py-1.5 text-xs font-semibold text-forest hover:bg-surface"
+              idleClassName="w-full rounded-xl border border-forest/30 bg-white px-4 py-2 text-sm font-semibold text-forest hover:bg-surface"
             />
           </form>
-          <form action={clearArchivedOrders}>
+          <form action={clearArchivedOrders} className="w-full">
             <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
             <AdminConfirmSubmitButton
               buttonLabel="Clear Archived Orders"
               confirmMessage="Permanently delete archived completed/cancelled orders? This cannot be undone."
-              idleClassName="rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+              idleClassName="w-full rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
             />
           </form>
         </div>
