@@ -124,7 +124,7 @@ const updateProductSchema = z.object({
   productId: z.string().uuid(),
   title: z.string().trim().min(2).max(180),
   sku: z.string().trim().max(40).optional(),
-  slug: z.string().trim().max(120).optional(),
+  slug: z.string().trim().max(255).optional(),
   description: z.string().trim().max(2000),
   categoryId: z.string().uuid(),
   imageUrl: z.string().trim().max(2048).optional(),
