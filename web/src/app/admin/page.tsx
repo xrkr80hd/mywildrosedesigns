@@ -375,9 +375,9 @@ async function getOrders(orderView: OrderView): Promise<OrderWithFileLink[]> {
 
   const filteredRows =
     orderView === "archived"
-      ? rows.filter((order) => Boolean(order.archived_at))
+      ? rows.filter((order) => Boolean(order.archived_at) && order.status !== "fulfilled")
       : orderView === "fulfilled"
-        ? rows.filter((order) => !order.archived_at && order.status === "fulfilled")
+        ? rows.filter((order) => order.status === "fulfilled")
       : orderView === "active"
         ? rows.filter((order) => !order.archived_at && order.status !== "fulfilled")
         : rows;
@@ -1681,7 +1681,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                     : "border-transparent text-foreground/70 hover:text-forest"
                 }`}
               >
-                Fulfilled
+                Fulfilled Archive
               </Link>
               <Link
                 href={ordersViewHref("all")}

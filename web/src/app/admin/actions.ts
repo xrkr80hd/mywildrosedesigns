@@ -606,17 +606,41 @@ export async function updateOrderStatus(formData: FormData) {
     nextNotes = appendFulfillmentNote(existingNotes, parsed.data.fulfillmentNote);
   }
 
-  const updatePayload: { status: (typeof ORDER_STATUS_VALUES)[number]; notes?: string } = {
+  const baseUpdatePayload: { status: (typeof ORDER_STATUS_VALUES)[number]; notes?: string } = {
     status: parsed.data.status,
   };
   if (nextNotes) {
-    updatePayload.notes = nextNotes;
+    baseUpdatePayload.notes = nextNotes;
   }
 
-  const updateResult = await supabase
+  const archiveAwarePayload =
+    parsed.data.status === "fulfilled"
+      ? {
+          ...baseUpdatePayload,
+          archived_at: new Date().toISOString(),
+          archived_by: "admin_fulfilled",
+        }
+      : {
+          ...baseUpdatePayload,
+          archived_at: null,
+          archived_by: null,
+        };
+
+  let updateResult = await supabase
     .from("orders")
-    .update(updatePayload)
+    .update(archiveAwarePayload)
     .eq("id", parsed.data.orderId);
+
+  if (
+    updateResult.error &&
+    (isMissingColumnError(updateResult.error, "archived_at") ||
+      isMissingColumnError(updateResult.error, "archived_by"))
+  ) {
+    updateResult = await supabase
+      .from("orders")
+      .update(baseUpdatePayload)
+      .eq("id", parsed.data.orderId);
+  }
 
   if (updateResult.error) {
     return redirectAdminError("save_failed", redirectTo);
