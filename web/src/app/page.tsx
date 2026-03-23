@@ -1,8 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { AddToCartButton } from "@/components/add-to-cart-button";
 import { HotItemPopup } from "@/components/hot-item-popup";
-import { ShareProductButton } from "@/components/share-product-button";
+import { ProductListingCard } from "@/components/product-listing-card";
 import { getStorefrontData } from "@/lib/storefront";
 
 const steps = [
@@ -142,68 +141,15 @@ export default async function Home() {
 
       <section className="mx-auto w-full max-w-6xl px-6 pb-16">
         <h2 className="mb-4 text-3xl text-forest">Featured Products</h2>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid auto-rows-fr gap-4 md:grid-cols-3">
           {featured.map((product) => (
-            <article
+            <ProductListingCard
               key={product.id}
-              className="rounded-2xl border border-rose/20 bg-white/90 p-4 shadow-sm"
-            >
-              <Image
-                src={product.imageUrl}
-                alt={product.title}
-                width={400}
-                height={400}
-                className="h-44 w-full rounded-xl border border-rose/15 bg-surface object-contain p-4"
-              />
-              <p className="mt-3 text-sm font-semibold uppercase tracking-[0.12em] text-gold">
-                {product.categoryName}
-              </p>
-              <h3 className="mt-1 text-xl text-forest">{product.title}</h3>
-              <p className="mt-1 text-sm text-foreground/75">{product.description}</p>
-              <div className="mt-4">
-                <div>
-                  {product.saleEnabled ? (
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-rose">
-                      {product.saleLabel} {product.salePercentOff}% off
-                    </p>
-                  ) : null}
-                  <p className="text-base font-bold text-rose">
-                    {product.hasVariants ? "From " : ""}
-                    ${(product.effectivePriceCents / 100).toFixed(2)}
-                    {product.saleEnabled ? (
-                      <span className="ml-2 text-xs font-medium text-foreground/55 line-through">
-                        ${(product.basePriceCents / 100).toFixed(2)}
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Link
-                    href={`/shop/${product.slug}`}
-                    className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
-                  >
-                    View Item
-                  </Link>
-                  {product.hasVariants ? (
-                    <Link
-                      href={`/shop/${product.slug}`}
-                      className="rounded-xl bg-rose px-4 py-2 text-xs font-semibold text-white hover:bg-rose/90"
-                    >
-                      {product.cartCtaText || "Add to Cart"}
-                    </Link>
-                  ) : (
-                    <AddToCartButton
-                      id={product.id}
-                      title={product.title}
-                      price={product.effectivePriceCents / 100}
-                      productSlug={product.slug}
-                      label={product.cartCtaText}
-                    />
-                  )}
-                  <ShareProductButton path={`/shop/${product.slug}`} title={product.title} />
-                </div>
-              </div>
-            </article>
+              product={product}
+              showCategory
+              imageHeightClassName="h-44"
+              titleClassName="text-xl"
+            />
           ))}
         </div>
       </section>

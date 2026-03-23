@@ -1,5 +1,7 @@
 import "server-only";
 
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import {
   DEFAULT_APPAREL_SIZE_PROFILES,
   DEFAULT_APPAREL_SIZES,
@@ -111,6 +113,86 @@ const DEFAULT_POSTS: WelcomePost[] = [
   },
 ];
 
+const SHOULD_USE_LOCAL_FALLBACK_PRODUCTS =
+  process.env.NODE_ENV !== "production";
+
+type LegacySampleProduct = {
+  id?: string;
+  title?: string;
+  category?: string;
+  price?: number;
+  image?: string;
+  description?: string;
+};
+
+function slugifyProductValue(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function toFallbackProduct(sample: LegacySampleProduct): StorefrontProduct | null {
+  const title = String(sample.title ?? "").trim();
+  if (!title) {
+    return null;
+  }
+
+  const categoryName = String(sample.category ?? "Products").trim() || "Products";
+  const categorySlug = slugifyProductValue(categoryName) || "products";
+  const id = String(sample.id ?? slugifyProductValue(title)).trim() || slugifyProductValue(title);
+  const slug = slugifyProductValue(title) || id;
+  const imagePath = String(sample.image ?? "assets/img/product-tee.svg").trim();
+  const normalizedImagePath = imagePath.startsWith("/") ? imagePath : `/${imagePath.replace(/^\.?\/?/, "")}`;
+  const price = Number(sample.price ?? 0);
+  const basePriceCents = Number.isFinite(price) ? Math.round(price * 100) : 0;
+
+  return {
+    id,
+    sku: id.toUpperCase(),
+    title,
+    description: String(sample.description ?? "").trim(),
+    slug,
+    categoryName,
+    categorySlug,
+    imageUrl: normalizedImagePath,
+    basePriceCents,
+    effectivePriceCents: basePriceCents,
+    stockOnHand: 1,
+    isFeatured: true,
+    isHot: false,
+    saleEnabled: false,
+    salePercentOff: 0,
+    saleLabel: "Sale",
+    cartCtaText: "Add to Cart",
+    productType: "apparel",
+    sizeProfiles: [...DEFAULT_APPAREL_SIZE_PROFILES],
+    sizeValues: [...DEFAULT_APPAREL_SIZES],
+    hasVariants: false,
+    variants: [],
+  };
+}
+
+async function loadLocalFallbackProducts(): Promise<StorefrontProduct[]> {
+  if (!SHOULD_USE_LOCAL_FALLBACK_PRODUCTS) {
+    return [];
+  }
+
+  try {
+    const filePath = path.join(process.cwd(), "..", "assets", "data", "products.json");
+    const raw = await readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw) as LegacySampleProduct[];
+
+    return parsed
+      .map((sample) => toFallbackProduct(sample))
+      .filter((product): product is StorefrontProduct => Boolean(product));
+  } catch {
+    return [];
+  }
+}
+
 function normalizeHeroBadge(value: string): string {
   const cleaned = value.trim();
   if (!cleaned) {
@@ -136,6 +218,8 @@ function isMissingTableError(error: unknown, tableName: string): boolean {
 }
 
 export async function getStorefrontData() {
+  const fallbackProducts = await loadLocalFallbackProducts();
+
   try {
     const supabase = getSupabaseAdminClient();
 
@@ -345,7 +429,13 @@ export async function getStorefrontData() {
         sortOrder: post.sort_order,
       })) ?? DEFAULT_POSTS;
 
-    const hotProduct = products.find((product) => product.isHot) ?? null;
+    const resolvedProducts = products.length > 0 ? products : fallbackProducts;
+    const resolvedCategoryNames =
+      products.length > 0
+        ? Array.from(new Set(categoryNames))
+        : Array.from(new Set(fallbackProducts.map((product) => product.categoryName)));
+
+    const hotProduct = resolvedProducts.find((product) => product.isHot) ?? null;
     let popupRow = popupResult.data;
 
     if (popupResult.error) {
@@ -371,7 +461,7 @@ export async function getStorefrontData() {
 
     const selectedPopupProduct =
       popupRow?.product_id
-        ? products.find((product) => product.id === popupRow.product_id) ?? null
+        ? resolvedProducts.find((product) => product.id === popupRow.product_id) ?? null
         : null;
     const popupProduct = selectedPopupProduct ?? hotProduct;
     const popupEnabled = popupRow?.enabled ?? Boolean(hotProduct);
@@ -388,18 +478,22 @@ export async function getStorefrontData() {
     };
 
     return {
-      products,
-      featuredProducts: products.filter((product) => product.isFeatured).slice(0, 6),
-      categoryNames: Array.from(new Set(categoryNames)),
+      products: resolvedProducts,
+      featuredProducts: resolvedProducts.filter((product) => product.isFeatured).slice(0, 6),
+      categoryNames: resolvedCategoryNames,
       settings,
       welcomePosts,
       popup,
     };
   } catch {
+    const resolvedFallbackProducts = fallbackProducts;
+
     return {
-      products: [],
-      featuredProducts: [],
-      categoryNames: [],
+      products: resolvedFallbackProducts,
+      featuredProducts: resolvedFallbackProducts.filter((product) => product.isFeatured).slice(0, 6),
+      categoryNames: Array.from(
+        new Set(resolvedFallbackProducts.map((product) => product.categoryName)),
+      ),
       settings: DEFAULT_SETTINGS,
       welcomePosts: DEFAULT_POSTS,
       popup: {

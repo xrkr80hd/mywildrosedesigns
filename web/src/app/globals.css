@@ -9,6 +9,9 @@
   --rose-soft: #c97389;
   --forest: #2f4b3c;
   --gold: #bb8242;
+  --radius-square-0: 0;
+  --radius-square-1: 0.25rem;
+  --radius-square-2: 0.5rem;
 }
 
 @theme inline {
@@ -31,6 +34,32 @@ body {
   min-height: 100vh;
 }
 
+/* Normalize rounded utilities into a sharper square system across the app. */
+[class~="rounded-none"],
+[class*="rounded-none"] {
+  border-radius: var(--radius-square-0) !important;
+}
+
+[class*="rounded-"]:not([class*="rounded-none"]),
+[class~="rounded"] {
+  border-radius: var(--radius-square-1) !important;
+}
+
+[class~="rounded-xl"],
+[class*="rounded-xl"],
+[class~="rounded-2xl"],
+[class*="rounded-2xl"],
+[class~="rounded-3xl"],
+[class*="rounded-3xl"],
+[class~="rounded-full"],
+[class*="rounded-full"] {
+  border-radius: var(--radius-square-2) !important;
+}
+
+input[type="file"]::file-selector-button {
+  border-radius: var(--radius-square-1) !important;
+}
+
 h1,
 h2,
 h3,
@@ -51,7 +80,7 @@ h4 {
 .hero-kicker {
   display: inline-block;
   border: 1px solid rgba(47, 75, 60, 0.26);
-  border-radius: 0.35rem;
+  border-radius: var(--radius-square-1);
   background: #f3ece4;
   padding: 0.4rem 0.78rem;
   font-size: 0.71rem;
@@ -92,7 +121,7 @@ h4 {
   align-items: center;
   border: 1px solid rgba(159, 59, 85, 0.28);
   border-bottom-width: 3px;
-  border-radius: 0.45rem;
+  border-radius: var(--radius-square-1);
   background: #fff;
   padding: 0.45rem 0.85rem;
   font-size: 0.85rem;
@@ -112,6 +141,14 @@ h4 {
   border-color: var(--rose);
   background: var(--rose);
   color: #fff;
+}
+
+.product-card-title {
+  min-height: 3.75rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .admin-shell {
@@ -181,7 +218,7 @@ details[open] > .admin-expand-summary .admin-expand-caret {
 }
 
 .admin-toast {
-  border-radius: 0.9rem;
+  border-radius: var(--radius-square-2);
   border: 1px solid transparent;
   padding: 0.75rem 1rem;
   font-size: 0.85rem;

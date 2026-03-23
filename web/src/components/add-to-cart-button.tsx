@@ -17,6 +17,7 @@ type AddToCartButtonProps = {
   addedLabel?: string;
   className?: string;
   disabled?: boolean;
+  showViewCartAfterAdd?: boolean;
   onAdded?: () => void;
 };
 
@@ -32,6 +33,7 @@ export function AddToCartButton({
   addedLabel = "Added",
   className,
   disabled = false,
+  showViewCartAfterAdd = true,
   onAdded,
 }: AddToCartButtonProps) {
   const [added, setAdded] = useState(false);
@@ -97,10 +99,12 @@ export function AddToCartButton({
     }
 
     setAdded(true);
-    setShowViewCart(true);
+    setShowViewCart(showViewCartAfterAdd);
     onAdded?.();
     addedTimerRef.current = window.setTimeout(() => setAdded(false), 1000);
-    viewCartTimerRef.current = window.setTimeout(() => setShowViewCart(false), 4500);
+    if (showViewCartAfterAdd) {
+      viewCartTimerRef.current = window.setTimeout(() => setShowViewCart(false), 4500);
+    }
   }
 
   const fullWidth = className?.includes("w-full") ?? false;

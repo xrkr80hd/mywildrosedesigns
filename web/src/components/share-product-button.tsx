@@ -7,6 +7,7 @@ type ShareProductButtonProps = {
   title: string;
   label?: string;
   className?: string;
+  showStatusText?: boolean;
 };
 
 function resolveShareUrl(path: string) {
@@ -30,6 +31,7 @@ export function ShareProductButton({
   title,
   label = "Share",
   className = "",
+  showStatusText = true,
 }: ShareProductButtonProps) {
   const [status, setStatus] = useState("");
 
@@ -80,7 +82,7 @@ export function ShareProductButton({
       >
         {label}
       </button>
-      {status ? <span className="text-[11px] text-foreground/70">{status}</span> : null}
+      {showStatusText && status ? <span className="text-[11px] text-foreground/70">{status}</span> : null}
     </div>
   );
 }

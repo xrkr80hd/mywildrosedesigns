@@ -1,7 +1,7 @@
-﻿import Image from "next/image";
-import Link from "next/link";
-import { MobileSiteNav } from "@/components/mobile-site-nav";
+﻿import { MobileSiteNav } from "@/components/mobile-site-nav";
 import { getSiteContentSettings } from "@/lib/site-content";
+import Image from "next/image";
+import Link from "next/link";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -19,7 +19,10 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-[80] border-b border-rose/20 bg-white/90 backdrop-blur md:static md:z-auto">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:gap-4 sm:px-6">
-          <Link href="/" className="group inline-flex min-w-0 flex-1 items-center gap-3">
+          <Link
+            href="/"
+            className="group inline-flex min-w-0 flex-1 items-center gap-3"
+          >
             <Image
               src="/assets/img/MyWRDLogo.png"
               alt="Wild Rose Designs"
@@ -37,13 +40,12 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
 
-          <nav className="hidden flex-wrap items-center gap-4 md:flex" aria-label="Primary navigation">
+          <nav
+            className="hidden flex-wrap items-center gap-4 md:flex"
+            aria-label="Primary navigation"
+          >
             {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="nav-underline"
-              >
+              <Link key={link.href} href={link.href} className="nav-underline">
                 {link.label}
               </Link>
             ))}
@@ -60,7 +62,8 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
           <div>
             <h3 className="text-lg text-forest">Wild Rose Designs</h3>
             <p className="mt-2 text-sm text-foreground/75">
-              Handmade custom apparel, seasonal collections, and personalized products.
+              Handmade custom apparel, seasonal collections, and personalized
+              products.
             </p>
           </div>
           <div>
@@ -68,13 +71,22 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
               Shop
             </h4>
             <div className="mt-3 space-y-2 text-sm">
-              <Link className="block hover:text-rose" href="/shop?category=Apparel">
+              <Link
+                className="block hover:text-rose"
+                href="/shop?category=Apparel"
+              >
                 Apparel
               </Link>
-              <Link className="block hover:text-rose" href="/shop?category=School">
+              <Link
+                className="block hover:text-rose"
+                href="/shop?category=School"
+              >
                 School & Teams
               </Link>
-              <Link className="block hover:text-rose" href="/shop?category=Seasonal">
+              <Link
+                className="block hover:text-rose"
+                href="/shop?category=Seasonal"
+              >
                 Seasonal
               </Link>
             </div>
@@ -103,9 +115,20 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
               Questions? Reach out and we will get back quickly.
             </p>
             <p className="mt-1 text-sm font-semibold text-forest">
-              <a href={`mailto:${content.contact.email}`} className="hover:text-rose">
+              <a
+                href={`mailto:${content.contact.email}`}
+                className="hover:text-rose"
+              >
                 {content.contact.email}
               </a>
+            </p>
+            {content.contact.phone ? (
+              <p className="mt-1 text-sm text-foreground/75">
+                {content.contact.phone}
+              </p>
+            ) : null}
+            <p className="mt-2 whitespace-pre-line text-sm text-foreground/75">
+              {content.contact.address}
             </p>
           </div>
         </div>

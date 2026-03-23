@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
-import { AddToCartButton } from "@/components/add-to-cart-button";
-import { ShareProductButton } from "@/components/share-product-button";
+import { ProductListingCard } from "@/components/product-listing-card";
 import { getStorefrontData } from "@/lib/storefront";
 
 type ShopPageProps = {
@@ -87,58 +85,13 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
         {grouped.map((group) => (
           <div key={group.categoryName} className="space-y-3">
             <h2 className="text-2xl text-forest">{group.categoryName}</h2>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-3">
               {group.items.map((product) => (
-                <article
+                <ProductListingCard
                   key={product.id}
-                  className="rounded-2xl border border-rose/20 bg-white/90 p-4 shadow-sm"
-                >
-                  <Image
-                    src={product.imageUrl}
-                    alt={product.title}
-                    width={400}
-                    height={400}
-                    className="h-48 w-full rounded-xl border border-rose/15 bg-surface object-contain p-4"
-                  />
-                  <h3 className="mt-3 text-lg text-forest">{product.title}</h3>
-                  <div className="mt-2">
-                    <p className="text-lg font-bold text-rose">
-                      {product.hasVariants ? "From " : ""}
-                      ${(product.effectivePriceCents / 100).toFixed(2)}
-                      {product.saleEnabled ? (
-                        <span className="ml-2 text-xs font-medium text-foreground/55 line-through">
-                          ${(product.basePriceCents / 100).toFixed(2)}
-                        </span>
-                      ) : null}
-                    </p>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/shop/${product.slug}`}
-                      className="rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
-                    >
-                      View Item
-                    </Link>
-                    {product.hasVariants ? (
-                      <Link
-                        href={`/shop/${product.slug}`}
-                        className="rounded-xl bg-rose px-4 py-2 text-xs font-semibold text-white hover:bg-rose/90"
-                      >
-                        {product.cartCtaText || "Add to Cart"}
-                      </Link>
-                    ) : (
-                      <AddToCartButton
-                        id={product.id}
-                        title={product.title}
-                        price={product.effectivePriceCents / 100}
-                        productSlug={product.slug}
-                        label={product.cartCtaText}
-                        className="rounded-xl bg-rose px-4 py-2 text-xs font-semibold text-white hover:bg-rose/90"
-                      />
-                    )}
-                    <ShareProductButton path={`/shop/${product.slug}`} title={product.title} />
-                  </div>
-                </article>
+                  product={product}
+                  imageHeightClassName="h-48"
+                />
               ))}
             </div>
           </div>

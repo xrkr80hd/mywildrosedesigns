@@ -1,10 +1,13 @@
-import type { Metadata } from "next";
 import { OrderForm } from "@/components/order-form";
 import { getUploadProductOptions } from "@/lib/product-options-store";
+import type { Metadata } from "next";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Upload",
-  description: "Upload your custom design and submit your Wild Rose production request.",
+  description:
+    "Upload your custom design and submit your Wild Rose production request.",
 };
 
 const steps = [
@@ -25,7 +28,8 @@ export default async function UploadPage() {
         </p>
         <h1 className="mt-2 text-4xl text-forest">Upload Your Design</h1>
         <p className="mt-2 text-sm text-foreground/75">
-          Send artwork, choose your print option, and complete secure payment in one flow.
+          Send artwork, choose your print option, and complete secure payment in
+          one flow.
         </p>
       </header>
 
@@ -35,7 +39,9 @@ export default async function UploadPage() {
           <ol className="mt-4 space-y-2 text-sm text-foreground/80">
             {steps.map((step, index) => (
               <li key={step}>
-                <span className="mr-2 font-semibold text-rose">{index + 1}.</span>
+                <span className="mr-2 font-semibold text-rose">
+                  {index + 1}.
+                </span>
                 {step}
               </li>
             ))}
@@ -47,7 +53,8 @@ export default async function UploadPage() {
               PNG, JPG, WEBP, SVG, PDF, AI, EPS, PSD up to 50MB.
             </p>
             <p className="mt-1 text-sm text-foreground/75">
-              If you are unsure on sizing, upload your largest high-resolution file.
+              If you are unsure on sizing, upload your largest high-resolution
+              file.
             </p>
           </div>
         </article>

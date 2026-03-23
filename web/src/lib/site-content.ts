@@ -1,10 +1,11 @@
 import "server-only";
 
-import { unstable_noStore as noStore } from "next/cache";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { unstable_noStore as noStore } from "next/cache";
 
 const SITE_SETTING_PREFIX = "site-setting::";
 const SITE_SETTING_SORT_ORDER = 9000;
+const OPTIONAL_EMPTY_VALUE_KEYS = new Set<SiteContentKey>(["contact_phone"]);
 
 export type AboutPageContent = {
   badge: string;
@@ -32,6 +33,8 @@ export type ContactPageContent = {
   intro: string;
   email: string;
   phone: string;
+  address: string;
+  printLabelThankYouNote: string;
   hoursTitle: string;
   hoursWeekday: string;
   hoursSaturday: string;
@@ -66,6 +69,8 @@ export const SITE_CONTENT_KEYS = [
   "contact_intro",
   "contact_email",
   "contact_phone",
+  "contact_address",
+  "contact_print_label_thank_you_note",
   "contact_hours_title",
   "contact_hours_weekday",
   "contact_hours_saturday",
@@ -108,8 +113,11 @@ const DEFAULT_VALUES_BY_KEY: Record<SiteContentKey, string> = {
   contact_title: "Get in Touch",
   contact_intro:
     "Need a quote, turnaround timing, or help with a custom order? Send a message.",
-  contact_email: "orders@wildrosedesign.com",
-  contact_phone: "(555) 123-WILD",
+  contact_email: "mywildrosedesignsllc@gmail.com",
+  contact_phone: "3182667346",
+  contact_address: "P.O. Box 42, Simpson, LA 71474",
+  contact_print_label_thank_you_note:
+    "Your support means the world to my family.",
   contact_hours_title: "Business Hours",
   contact_hours_weekday: "Mon - Fri: 9:00 AM - 6:00 PM",
   contact_hours_saturday: "Saturday: 10:00 AM - 4:00 PM",
@@ -142,6 +150,9 @@ const DEFAULT_SITE_CONTENT: SiteContentSettings = {
     intro: DEFAULT_VALUES_BY_KEY.contact_intro,
     email: DEFAULT_VALUES_BY_KEY.contact_email,
     phone: DEFAULT_VALUES_BY_KEY.contact_phone,
+    address: DEFAULT_VALUES_BY_KEY.contact_address,
+    printLabelThankYouNote:
+      DEFAULT_VALUES_BY_KEY.contact_print_label_thank_you_note,
     hoursTitle: DEFAULT_VALUES_BY_KEY.contact_hours_title,
     hoursWeekday: DEFAULT_VALUES_BY_KEY.contact_hours_weekday,
     hoursSaturday: DEFAULT_VALUES_BY_KEY.contact_hours_saturday,
@@ -170,8 +181,15 @@ function readValue(
   map: Map<SiteContentKey, string>,
   key: SiteContentKey,
 ): string {
-  const candidate = map.get(key)?.trim() ?? "";
-  return candidate || DEFAULT_VALUES_BY_KEY[key];
+  const rawValue = map.get(key);
+  if (rawValue !== undefined) {
+    const candidate = rawValue.trim();
+    if (candidate || OPTIONAL_EMPTY_VALUE_KEYS.has(key)) {
+      return candidate;
+    }
+  }
+
+  return DEFAULT_VALUES_BY_KEY[key];
 }
 
 export function isSiteSettingTitle(title: string): boolean {
@@ -199,7 +217,10 @@ export async function getSiteContentSettings(): Promise<SiteContentSettings> {
     }
 
     const valuesByKey = new Map<SiteContentKey, string>();
-    for (const row of (result.data ?? []) as Array<{ title: string; body: string }>) {
+    for (const row of (result.data ?? []) as Array<{
+      title: string;
+      body: string;
+    }>) {
       const key = toSettingKey(row.title);
       if (!key) {
         continue;
@@ -233,6 +254,11 @@ export async function getSiteContentSettings(): Promise<SiteContentSettings> {
         intro: readValue(valuesByKey, "contact_intro"),
         email: readValue(valuesByKey, "contact_email"),
         phone: readValue(valuesByKey, "contact_phone"),
+        address: readValue(valuesByKey, "contact_address"),
+        printLabelThankYouNote: readValue(
+          valuesByKey,
+          "contact_print_label_thank_you_note",
+        ),
         hoursTitle: readValue(valuesByKey, "contact_hours_title"),
         hoursWeekday: readValue(valuesByKey, "contact_hours_weekday"),
         hoursSaturday: readValue(valuesByKey, "contact_hours_saturday"),
@@ -249,7 +275,10 @@ export async function saveSiteContentValues(
 ): Promise<void> {
   const entries = Object.entries(values)
     .filter(([key]) => SITE_CONTENT_KEYS.includes(key as SiteContentKey))
-    .map(([key, value]) => [key as SiteContentKey, String(value ?? "").trim()] as const);
+    .map(
+      ([key, value]) =>
+        [key as SiteContentKey, String(value ?? "").trim()] as const,
+    );
 
   if (entries.length === 0) {
     return;
@@ -269,9 +298,11 @@ export async function saveSiteContentValues(
   }
 
   const existingByTitle = new Map(
-    ((existingResult.data ?? []) as Array<Pick<WelcomeSettingRow, "id" | "title">>).map(
-      (row) => [row.title, row.id],
-    ),
+    (
+      (existingResult.data ?? []) as Array<
+        Pick<WelcomeSettingRow, "id" | "title">
+      >
+    ).map((row) => [row.title, row.id]),
   );
 
   for (const [key, value] of entries) {
@@ -287,7 +318,10 @@ export async function saveSiteContentValues(
 
     const existingId = existingByTitle.get(title);
     const writeResult = existingId
-      ? await supabase.from("welcome_posts").update(payload).eq("id", existingId)
+      ? await supabase
+          .from("welcome_posts")
+          .update(payload)
+          .eq("id", existingId)
       : await supabase.from("welcome_posts").insert(payload);
 
     if (writeResult.error) {

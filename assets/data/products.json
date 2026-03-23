@@ -1,5 +1,13 @@
 [
   {
+    "id": "wr-test-featured-001",
+    "title": "Featured Test Shirt",
+    "category": "Testing",
+    "price": 21.0,
+    "image": "assets/img/product-tee.svg",
+    "description": "Local-only sample item for verifying the homepage featured card layout."
+  },
+  {
     "id": "wr-tee-001",
     "title": "Wild Rose Script Tee",
     "category": "Apparel",

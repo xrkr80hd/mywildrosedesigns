@@ -9,13 +9,13 @@ type PrintOrderLabelButtonProps = {
   productOption: string;
   quantity: number;
   createdAt: string;
+  businessAddress: string;
+  businessEmail: string;
+  businessPhone: string;
+  defaultThankYouNote: string;
 };
 
 const BUSINESS_NAME = "Wild Rose Designs";
-const BUSINESS_ADDRESS = "P.O. Box 42, Simpson, LA 71474";
-const BUSINESS_EMAIL = "mywildrosedesignsllc@gmail.com";
-const DEFAULT_THANK_YOU =
-  "We at Wild Rose Designs thank you so much for your purchase and for supporting local business. Your support truly means the world to us.";
 
 function formatDateTime(value: string): string {
   const date = new Date(value);
@@ -42,12 +42,18 @@ export function PrintOrderLabelButton({
   productOption,
   quantity,
   createdAt,
+  businessAddress,
+  businessEmail,
+  businessPhone,
+  defaultThankYouNote,
 }: PrintOrderLabelButtonProps) {
   const [showEditor, setShowEditor] = useState(false);
-  const [recipientName, setRecipientName] = useState(customerName || "Customer");
+  const [recipientName, setRecipientName] = useState(
+    customerName || "Customer",
+  );
   const [recipientEmail, setRecipientEmail] = useState(customerEmail || "");
   const [labelNote, setLabelNote] = useState("");
-  const [thankYouNote, setThankYouNote] = useState(DEFAULT_THANK_YOU);
+  const [thankYouNote, setThankYouNote] = useState(defaultThankYouNote);
 
   const createdAtText = useMemo(() => formatDateTime(createdAt), [createdAt]);
 
@@ -56,10 +62,16 @@ export function PrintOrderLabelButton({
       return;
     }
 
-    const logoUrl = `${window.location.origin}/assets/img/WRD_hero.png`;
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=980,height=760");
+    const logoUrl = `${window.location.origin}/assets/img/MyWRDLogo.png`;
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "noopener,noreferrer,width=980,height=760",
+    );
     if (!printWindow) {
-      window.alert("Unable to open print window. Please allow popups and try again.");
+      window.alert(
+        "Unable to open print window. Please allow popups and try again.",
+      );
       return;
     }
 
@@ -69,7 +81,15 @@ export function PrintOrderLabelButton({
     const safeOrderNumber = escapeHtml(orderNumber);
     const safeCreated = escapeHtml(createdAtText);
     const safeLabelNote = escapeHtml(labelNote || "-");
-    const safeThankYou = escapeHtml(thankYouNote || DEFAULT_THANK_YOU);
+    const safeThankYou = escapeHtml(thankYouNote || defaultThankYouNote);
+    const safeBusinessLine = escapeHtml(
+      [BUSINESS_NAME, businessAddress.replace(/\s+/g, " ").trim()]
+        .filter(Boolean)
+        .join(" | "),
+    );
+    const safeBusinessContact = escapeHtml(
+      [businessEmail.trim(), businessPhone.trim()].filter(Boolean).join(" | "),
+    );
 
     const html = `<!doctype html>
 <html>
@@ -89,29 +109,24 @@ export function PrintOrderLabelButton({
         max-width: 680px;
         margin: 0 auto;
         border: 2px solid #2f4b3c;
-        border-radius: 14px;
+        border-radius: 8px;
         padding: 16px;
       }
       .logo {
-        width: 260px;
+        width: 300px;
         max-width: 100%;
         display: block;
-        margin: 0 auto 12px;
-      }
-      .title {
-        margin: 0;
-        text-align: center;
-        font-size: 20px;
-        color: #2f4b3c;
+        margin: 0 auto 16px;
       }
       .sub {
-        margin: 4px 0 0;
+        margin: 0;
         text-align: center;
-        font-size: 12px;
+        font-size: 13px;
+        font-weight: 600;
         color: #6b7280;
       }
       .grid {
-        margin-top: 14px;
+        margin-top: 18px;
         display: grid;
         grid-template-columns: 140px 1fr;
         gap: 8px 10px;
@@ -151,8 +166,7 @@ export function PrintOrderLabelButton({
   <body>
     <div class="label">
       <img src="${logoUrl}" alt="Wild Rose Designs" class="logo" />
-      <h1 class="title">Order Item Label</h1>
-      <p class="sub">${escapeHtml(BUSINESS_NAME)} | ${escapeHtml(BUSINESS_ADDRESS)}</p>
+      <p class="sub">${safeBusinessLine}</p>
 
       <div class="grid">
         <div class="label-key">Order #</div><div>${safeOrderNumber}</div>
@@ -170,7 +184,7 @@ export function PrintOrderLabelButton({
       </div>
 
       <div class="footer">
-        ${escapeHtml(BUSINESS_EMAIL)}
+        ${safeBusinessContact}
       </div>
     </div>
 
@@ -211,7 +225,9 @@ export function PrintOrderLabelButton({
       {showEditor ? (
         <div className="grid gap-2 rounded-xl border border-rose/20 bg-white p-3 text-left md:grid-cols-2">
           <label className="space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Recipient Name</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+              Recipient Name
+            </span>
             <input
               value={recipientName}
               onChange={(event) => setRecipientName(event.currentTarget.value)}
@@ -219,7 +235,9 @@ export function PrintOrderLabelButton({
             />
           </label>
           <label className="space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Recipient Email</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+              Recipient Email
+            </span>
             <input
               value={recipientEmail}
               onChange={(event) => setRecipientEmail(event.currentTarget.value)}
@@ -227,7 +245,9 @@ export function PrintOrderLabelButton({
             />
           </label>
           <label className="space-y-1 md:col-span-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Fulfillment Note</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+              Fulfillment Note
+            </span>
             <input
               value={labelNote}
               onChange={(event) => setLabelNote(event.currentTarget.value)}
@@ -236,7 +256,9 @@ export function PrintOrderLabelButton({
             />
           </label>
           <label className="space-y-1 md:col-span-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Thank You Message</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+              Thank You Message
+            </span>
             <textarea
               value={thankYouNote}
               onChange={(event) => setThankYouNote(event.currentTarget.value)}
