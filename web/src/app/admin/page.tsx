@@ -850,9 +850,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       : `/admin?orderView=${nextView}#orders-uploads`;
   const orderRedirectTo = (orderId?: string) =>
     `${orderViewBasePath}${orderId ? `#order-${orderId}` : "#orders-uploads"}`;
-  const popupDefaultMode: PopupCtaMode = popup.product_id ? "inventory" : "slug";
+  const popupDefaultMode: PopupCtaMode = popup.product_id
+    ? "inventory"
+    : "slug";
   const popupLinkedProduct = popup.product_id
-    ? products.find((product) => product.id === popup.product_id) ?? null
+    ? (products.find((product) => product.id === popup.product_id) ?? null)
     : null;
   const popupDefaultSlug =
     popupLinkedProduct?.slug ?? extractShopSlugFromHref(popup.cta_href);
@@ -1127,7 +1129,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               defaultProductId={popup.product_id}
             />
             <p className="text-xs text-foreground/65">
-              Inventory mode links CTA to a selected product while keeping frontend popup behavior unchanged.
+              Inventory mode links CTA to a selected product while keeping
+              frontend popup behavior unchanged.
             </p>
           </label>
           <label className="space-y-1 md:col-span-2">
@@ -2505,9 +2508,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       </AdminDropdownSection>
 
       <section id="customer-messages" className="mt-8 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl text-forest">Customer Messages</h2>
-          <p className="text-xs text-foreground/70">{messages.length} total</p>
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose/20 bg-white/80 px-4 py-3 shadow-sm">
+          <h2 className="text-2xl text-rose">Customer Messages</h2>
+          <p className="rounded-full bg-rose/10 px-3 py-1 text-xs font-semibold text-rose-900">
+            {messages.length} total
+          </p>
         </div>
         {messages.length === 0 ? (
           <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
@@ -2595,20 +2600,20 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
       <section id="orders-uploads" className="mt-8 space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-2xl text-forest">Orders and Uploads</h2>
-            <p className="text-xs text-foreground/70">
+          <div className="rounded-2xl border border-rose/20 bg-white/80 px-4 py-3 shadow-sm">
+            <h2 className="text-2xl text-rose">Orders and Uploads</h2>
+            <p className="mt-1 rounded-full bg-rose/10 px-3 py-1 text-xs font-semibold text-rose-900 inline-flex">
               {orders.length} shown ({orderView})
             </p>
           </div>
           <div className="w-full md:w-auto">
-            <div className="flex flex-wrap items-end gap-4 border-b border-forest/20 pb-1 text-xs font-semibold">
+            <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-rose/20 bg-white/80 px-4 py-3 text-xs font-semibold shadow-sm">
               <Link
                 href={ordersViewHref("active")}
                 className={`border-b-2 pb-1 transition ${
                   orderView === "active"
-                    ? "border-forest text-forest"
-                    : "border-transparent text-foreground/70 hover:text-forest"
+                    ? "border-rose text-rose"
+                    : "border-transparent text-foreground/70 hover:text-rose"
                 }`}
               >
                 Active
@@ -2617,8 +2622,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 href={ordersViewHref("archived")}
                 className={`border-b-2 pb-1 transition ${
                   orderView === "archived"
-                    ? "border-forest text-forest"
-                    : "border-transparent text-foreground/70 hover:text-forest"
+                    ? "border-rose text-rose"
+                    : "border-transparent text-foreground/70 hover:text-rose"
                 }`}
               >
                 Archived
@@ -2627,8 +2632,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 href={ordersViewHref("fulfilled")}
                 className={`border-b-2 pb-1 transition ${
                   orderView === "fulfilled"
-                    ? "border-forest text-forest"
-                    : "border-transparent text-foreground/70 hover:text-forest"
+                    ? "border-rose text-rose"
+                    : "border-transparent text-foreground/70 hover:text-rose"
                 }`}
               >
                 Fulfilled Archive
@@ -2637,8 +2642,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 href={ordersViewHref("all")}
                 className={`border-b-2 pb-1 transition ${
                   orderView === "all"
-                    ? "border-forest text-forest"
-                    : "border-transparent text-foreground/70 hover:text-forest"
+                    ? "border-rose text-rose"
+                    : "border-transparent text-foreground/70 hover:text-rose"
                 }`}
               >
                 All

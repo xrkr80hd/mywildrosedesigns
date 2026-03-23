@@ -1,13 +1,13 @@
 import "server-only";
 
+import { getEffectivePriceCents } from "@/lib/pricing";
+import {
+    DEFAULT_APPAREL_SIZE_PROFILES,
+    DEFAULT_APPAREL_SIZES,
+} from "@/lib/product-variants";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  DEFAULT_APPAREL_SIZE_PROFILES,
-  DEFAULT_APPAREL_SIZES,
-} from "@/lib/product-variants";
-import { getEffectivePriceCents } from "@/lib/pricing";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export type StorefrontVariant = {
   id: string;
@@ -134,18 +134,25 @@ function slugifyProductValue(value: string): string {
     .slice(0, 80);
 }
 
-function toFallbackProduct(sample: LegacySampleProduct): StorefrontProduct | null {
+function toFallbackProduct(
+  sample: LegacySampleProduct,
+): StorefrontProduct | null {
   const title = String(sample.title ?? "").trim();
   if (!title) {
     return null;
   }
 
-  const categoryName = String(sample.category ?? "Products").trim() || "Products";
+  const categoryName =
+    String(sample.category ?? "Products").trim() || "Products";
   const categorySlug = slugifyProductValue(categoryName) || "products";
-  const id = String(sample.id ?? slugifyProductValue(title)).trim() || slugifyProductValue(title);
+  const id =
+    String(sample.id ?? slugifyProductValue(title)).trim() ||
+    slugifyProductValue(title);
   const slug = slugifyProductValue(title) || id;
   const imagePath = String(sample.image ?? "assets/img/product-tee.svg").trim();
-  const normalizedImagePath = imagePath.startsWith("/") ? imagePath : `/${imagePath.replace(/^\.?\/?/, "")}`;
+  const normalizedImagePath = imagePath.startsWith("/")
+    ? imagePath
+    : `/${imagePath.replace(/^\.?\/?/, "")}`;
   const price = Number(sample.price ?? 0);
   const basePriceCents = Number.isFinite(price) ? Math.round(price * 100) : 0;
 
@@ -181,7 +188,13 @@ async function loadLocalFallbackProducts(): Promise<StorefrontProduct[]> {
   }
 
   try {
-    const filePath = path.join(process.cwd(), "..", "assets", "data", "products.json");
+    const filePath = path.join(
+      process.cwd(),
+      "..",
+      "assets",
+      "data",
+      "products.json",
+    );
     const raw = await readFile(filePath, "utf8");
     const parsed = JSON.parse(raw) as LegacySampleProduct[];
 
@@ -212,8 +225,13 @@ function isMissingTableError(error: unknown, tableName: string): boolean {
     return false;
   }
 
-  const candidate = error as { code?: string; message?: string; details?: string };
-  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+  const text =
+    `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
   return candidate.code === "42P01" || text.includes(tableName.toLowerCase());
 }
 
@@ -246,7 +264,9 @@ export async function getStorefrontData() {
           .order("created_at", { ascending: true }),
         supabase
           .from("promo_popups")
-          .select("enabled, show_cta, promo_label, title, message, cta_text, cta_href, product_id")
+          .select(
+            "enabled, show_cta, promo_label, title, message, cta_text, cta_href, product_id",
+          )
           .eq("singleton_key", "main")
           .maybeSingle(),
       ]);
@@ -281,9 +301,13 @@ export async function getStorefrontData() {
         throw new Error(legacyProductResult.error.message);
       }
 
-      productRows = (legacyProductResult.data ?? []) as Array<Record<string, unknown>>;
+      productRows = (legacyProductResult.data ?? []) as Array<
+        Record<string, unknown>
+      >;
     } else {
-      productRows = (primaryProductResult.data ?? []) as Array<Record<string, unknown>>;
+      productRows = (primaryProductResult.data ?? []) as Array<
+        Record<string, unknown>
+      >;
     }
 
     const categoriesById = new Map(
@@ -321,7 +345,8 @@ export async function getStorefrontData() {
 
           const parentBasePrice = Number(parent.price_cents ?? 0);
           const variantBasePrice =
-            typeof row.price_override_cents === "number" && row.price_override_cents > 0
+            typeof row.price_override_cents === "number" &&
+            row.price_override_cents > 0
               ? row.price_override_cents
               : parentBasePrice;
           const variantEffectivePrice = getEffectivePriceCents(
@@ -329,8 +354,12 @@ export async function getStorefrontData() {
             Boolean(parent.sale_enabled),
             Number(parent.sale_percent_off ?? 0),
           );
-          const sizeValue = row.size_value ? String(row.size_value).trim() : null;
-          const colorValue = row.color_value ? String(row.color_value).trim() : null;
+          const sizeValue = row.size_value
+            ? String(row.size_value).trim()
+            : null;
+          const colorValue = row.color_value
+            ? String(row.color_value).trim()
+            : null;
           const label = [sizeValue, colorValue].filter(Boolean).join(" • ");
 
           const normalizedVariant: StorefrontVariant = {
@@ -391,7 +420,8 @@ export async function getStorefrontData() {
         salePercentOff: Number(product.sale_percent_off ?? 0),
         saleLabel: String(product.sale_label ?? "Sale"),
         cartCtaText: String(product.cart_cta_text ?? "Add to Cart"),
-        productType: product.product_type === "accessory" ? "accessory" : "apparel",
+        productType:
+          product.product_type === "accessory" ? "accessory" : "apparel",
         sizeProfiles: Array.isArray(product.size_profiles)
           ? (product.size_profiles as string[])
           : [...DEFAULT_APPAREL_SIZE_PROFILES],
@@ -433,9 +463,12 @@ export async function getStorefrontData() {
     const resolvedCategoryNames =
       products.length > 0
         ? Array.from(new Set(categoryNames))
-        : Array.from(new Set(fallbackProducts.map((product) => product.categoryName)));
+        : Array.from(
+            new Set(fallbackProducts.map((product) => product.categoryName)),
+          );
 
-    const hotProduct = resolvedProducts.find((product) => product.isHot) ?? null;
+    const hotProduct =
+      resolvedProducts.find((product) => product.isHot) ?? null;
     let popupRow = popupResult.data;
 
     if (popupResult.error) {
@@ -459,10 +492,11 @@ export async function getStorefrontData() {
       }
     }
 
-    const selectedPopupProduct =
-      popupRow?.product_id
-        ? resolvedProducts.find((product) => product.id === popupRow.product_id) ?? null
-        : null;
+    const selectedPopupProduct = popupRow?.product_id
+      ? (resolvedProducts.find(
+          (product) => product.id === popupRow.product_id,
+        ) ?? null)
+      : null;
     const popupProduct = selectedPopupProduct ?? hotProduct;
     const popupEnabled = popupRow?.enabled ?? Boolean(hotProduct);
 
@@ -479,7 +513,9 @@ export async function getStorefrontData() {
 
     return {
       products: resolvedProducts,
-      featuredProducts: resolvedProducts.filter((product) => product.isFeatured).slice(0, 6),
+      featuredProducts: resolvedProducts
+        .filter((product) => product.isFeatured)
+        .slice(0, 6),
       categoryNames: resolvedCategoryNames,
       settings,
       welcomePosts,
@@ -490,9 +526,13 @@ export async function getStorefrontData() {
 
     return {
       products: resolvedFallbackProducts,
-      featuredProducts: resolvedFallbackProducts.filter((product) => product.isFeatured).slice(0, 6),
+      featuredProducts: resolvedFallbackProducts
+        .filter((product) => product.isFeatured)
+        .slice(0, 6),
       categoryNames: Array.from(
-        new Set(resolvedFallbackProducts.map((product) => product.categoryName)),
+        new Set(
+          resolvedFallbackProducts.map((product) => product.categoryName),
+        ),
       ),
       settings: DEFAULT_SETTINGS,
       welcomePosts: DEFAULT_POSTS,
