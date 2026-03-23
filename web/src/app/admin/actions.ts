@@ -1,17 +1,21 @@
 ﻿"use server";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { z } from "zod";
-import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import { appendFulfillmentNote } from "@/lib/fulfillment-notes";
 import { recordSaleMovementsForOrder } from "@/lib/order-sales";
+import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import { DEFAULT_PRODUCT_OPTIONS } from "@/lib/product-options";
 import { isSiteSettingTitle, saveSiteContentValues } from "@/lib/site-content";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
 
 const CONTACT_STATUS_VALUES = ["new", "in_progress", "resolved"] as const;
-const ARCHIVABLE_ORDER_STATUSES = ["fulfilled", "completed", "cancelled"] as const;
+const ARCHIVABLE_ORDER_STATUSES = [
+  "fulfilled",
+  "completed",
+  "cancelled",
+] as const;
 
 const updateStatusSchema = z.object({
   orderId: z.string().uuid(),
@@ -58,7 +62,9 @@ const contactPageSchema = z.object({
   contactTitle: z.string().trim().min(2).max(120),
   contactIntro: z.string().trim().min(10).max(500),
   contactEmail: z.string().trim().min(3).max(160),
-  contactPhone: z.string().trim().min(3).max(80),
+  contactPhone: z.string().trim().max(80),
+  contactAddress: z.string().trim().min(3).max(240),
+  printLabelThankYouNote: z.string().trim().min(2).max(500),
   hoursTitle: z.string().trim().min(2).max(120),
   hoursWeekday: z.string().trim().min(2).max(120),
   hoursSaturday: z.string().trim().min(2).max(120),
@@ -194,6 +200,8 @@ const deleteProductVariantSchema = z.object({
   variantId: z.string().uuid(),
 });
 
+const POPUP_CTA_MODE_VALUES = ["slug", "inventory"] as const;
+
 const popupSchema = z.object({
   enabled: z.boolean(),
   showCta: z.boolean(),
@@ -201,6 +209,8 @@ const popupSchema = z.object({
   title: z.string().trim().max(120).optional(),
   message: z.string().trim().max(300).optional(),
   ctaText: z.string().trim().max(60).optional(),
+  popupCtaMode: z.enum(POPUP_CTA_MODE_VALUES).optional(),
+  ctaSlug: z.string().trim().max(255).optional(),
   ctaHref: z.string().trim().max(500).optional(),
   productId: z.string().uuid().optional(),
 });
@@ -211,7 +221,11 @@ const updateMessageSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 
-const transferOptionIdSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9-]{2,80}$/);
+const transferOptionIdSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9-]{2,80}$/);
 
 const uploadProductOptionSchema = z.object({
   id: transferOptionIdSchema,
@@ -234,7 +248,9 @@ const deleteUploadProductOptionSchema = z.object({
   optionId: transferOptionIdSchema,
 });
 
-const DEFAULT_TRANSFER_OPTION_IDS = new Set(DEFAULT_PRODUCT_OPTIONS.map((option) => option.id));
+const DEFAULT_TRANSFER_OPTION_IDS = new Set(
+  DEFAULT_PRODUCT_OPTIONS.map((option) => option.id),
+);
 
 function asBool(formData: FormData, key: string): boolean {
   return formData.get(key) === "on";
@@ -245,19 +261,98 @@ function nullableText(value: FormDataEntryValue | null): string | null {
   return text ? text : null;
 }
 
-function readUploadOptionField(formData: FormData, field: string, optionId: string) {
+function normalizePopupHref(value: string | undefined): string {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return "/shop";
+  }
+
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+function normalizePopupSlug(value: string | undefined): string | null {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) {
+    return null;
+  }
+
+  const withoutQuery = raw.split("?")[0] ?? "";
+  const withoutHash = withoutQuery.split("#")[0] ?? "";
+  const withoutPrefix = withoutHash.replace(/^\/+/, "").replace(/^shop\//, "");
+  const compact = withoutPrefix
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return compact || null;
+}
+
+async function resolvePopupProductTarget(input: {
+  productId?: string;
+  slug?: string | null;
+}): Promise<{ id: string; slug: string } | null> {
+  const supabase = getSupabaseAdminClient();
+
+  if (input.productId) {
+    const byIdResult = await supabase
+      .from("products")
+      .select("id, slug")
+      .eq("id", input.productId)
+      .maybeSingle();
+    if (!byIdResult.error && byIdResult.data?.id && byIdResult.data.slug) {
+      return {
+        id: byIdResult.data.id,
+        slug: String(byIdResult.data.slug),
+      };
+    }
+  }
+
+  if (input.slug) {
+    const bySlugResult = await supabase
+      .from("products")
+      .select("id, slug")
+      .eq("slug", input.slug)
+      .maybeSingle();
+    if (!bySlugResult.error && bySlugResult.data?.id && bySlugResult.data.slug) {
+      return {
+        id: bySlugResult.data.id,
+        slug: String(bySlugResult.data.slug),
+      };
+    }
+  }
+
+  return null;
+}
+
+function readUploadOptionField(
+  formData: FormData,
+  field: string,
+  optionId: string,
+) {
   return formData.get(`${field}_${optionId}`);
 }
 
 function readUploadOptionIds(formData: FormData): string[] {
   const rawIds = formData
     .getAll("optionIds")
-    .map((value) => String(value ?? "").trim().toLowerCase())
+    .map((value) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase(),
+    )
     .filter(Boolean);
   return Array.from(new Set(rawIds));
 }
 
-function resolveAdminRedirectTarget(formData: FormData, fallback = "/admin"): string {
+function resolveAdminRedirectTarget(
+  formData: FormData,
+  fallback = "/admin",
+): string {
   const requested = String(formData.get("redirectTo") ?? "").trim();
   if (requested.startsWith("/admin")) {
     const hashIndex = requested.indexOf("#");
@@ -271,7 +366,11 @@ function resolveAdminRedirectTarget(formData: FormData, fallback = "/admin"): st
   return fallback;
 }
 
-function redirectAdmin(toast?: string, error?: string, basePath = "/admin"): never {
+function redirectAdmin(
+  toast?: string,
+  error?: string,
+  basePath = "/admin",
+): never {
   const params = new URLSearchParams();
   if (toast) {
     params.set("toast", toast);
@@ -380,16 +479,22 @@ async function generateCategorySku(
     .maybeSingle();
 
   if (categoryResult.error || !categoryResult.data?.slug) {
-    throw new Error(categoryResult.error?.message ?? "Unable to resolve category slug.");
+    throw new Error(
+      categoryResult.error?.message ?? "Unable to resolve category slug.",
+    );
   }
 
   const categoryCode = categoryCodeFromSlug(categoryResult.data.slug);
-  const titleCode = slugify(title).replace(/-/g, "").toUpperCase().slice(0, 4) || "ITEM";
+  const titleCode =
+    slugify(title).replace(/-/g, "").toUpperCase().slice(0, 4) || "ITEM";
   const baseSku = `WR-${categoryCode}-${titleCode}`;
   return ensureUniqueSku(baseSku, ignoreId);
 }
 
-async function generateProductSlug(categoryId: string, title: string): Promise<string> {
+async function generateProductSlug(
+  categoryId: string,
+  title: string,
+): Promise<string> {
   const supabase = getSupabaseAdminClient();
   const categoryResult = await supabase
     .from("categories")
@@ -398,7 +503,9 @@ async function generateProductSlug(categoryId: string, title: string): Promise<s
     .maybeSingle();
 
   if (categoryResult.error || !categoryResult.data?.slug) {
-    throw new Error(categoryResult.error?.message ?? "Unable to resolve category slug.");
+    throw new Error(
+      categoryResult.error?.message ?? "Unable to resolve category slug.",
+    );
   }
 
   return ensureUniqueSlug("products", `${categoryResult.data.slug}-${title}`);
@@ -408,8 +515,15 @@ function isSlugConflict(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
   }
-  const candidate = error as { code?: string; message?: string; details?: string };
-  if (candidate.code === "23505" && (candidate.message ?? "").includes("slug")) {
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+  if (
+    candidate.code === "23505" &&
+    (candidate.message ?? "").includes("slug")
+  ) {
     return true;
   }
   return (candidate.details ?? "").includes("slug");
@@ -420,8 +534,13 @@ function isUniqueViolation(error: unknown): boolean {
     return false;
   }
 
-  const candidate = error as { code?: string; message?: string; details?: string };
-  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+  const text =
+    `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
   return candidate.code === "23505" || text.includes("duplicate key value");
 }
 
@@ -430,8 +549,13 @@ function isPopupColumnMismatch(error: unknown): boolean {
     return false;
   }
 
-  const candidate = error as { message?: string; details?: string; hint?: string };
-  const text = `${candidate.message ?? ""} ${candidate.details ?? ""} ${candidate.hint ?? ""}`.toLowerCase();
+  const candidate = error as {
+    message?: string;
+    details?: string;
+    hint?: string;
+  };
+  const text =
+    `${candidate.message ?? ""} ${candidate.details ?? ""} ${candidate.hint ?? ""}`.toLowerCase();
   return (
     text.includes("promo_label") ||
     text.includes("show_cta") ||
@@ -444,10 +568,18 @@ function isMissingTableError(error: unknown, tableName: string): boolean {
     return false;
   }
 
-  const candidate = error as { code?: string; message?: string; details?: string };
-  const haystack = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
-  return candidate.code === "42P01" ||
-    (haystack.includes(tableName.toLowerCase()) && haystack.includes("does not exist"));
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+  const haystack =
+    `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return (
+    candidate.code === "42P01" ||
+    (haystack.includes(tableName.toLowerCase()) &&
+      haystack.includes("does not exist"))
+  );
 }
 
 function isMissingColumnError(error: unknown, columnName: string): boolean {
@@ -455,13 +587,23 @@ function isMissingColumnError(error: unknown, columnName: string): boolean {
     return false;
   }
 
-  const candidate = error as { code?: string; message?: string; details?: string };
-  const haystack = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
-  return candidate.code === "42703" ||
-    (haystack.includes(columnName.toLowerCase()) && haystack.includes("does not exist"));
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+  const haystack =
+    `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return (
+    candidate.code === "42703" ||
+    (haystack.includes(columnName.toLowerCase()) &&
+      haystack.includes("does not exist"))
+  );
 }
 
-function isArchivableStatus(status: string): status is (typeof ARCHIVABLE_ORDER_STATUSES)[number] {
+function isArchivableStatus(
+  status: string,
+): status is (typeof ARCHIVABLE_ORDER_STATUSES)[number] {
   return (ARCHIVABLE_ORDER_STATUSES as readonly string[]).includes(status);
 }
 
@@ -496,7 +638,10 @@ async function ensureUniqueSlug(
   }
 }
 
-async function ensureUniqueSku(baseSku: string, ignoreId?: string): Promise<string> {
+async function ensureUniqueSku(
+  baseSku: string,
+  ignoreId?: string,
+): Promise<string> {
   const supabase = getSupabaseAdminClient();
   const root = normalizeSku(baseSku);
   let candidate = root;
@@ -523,7 +668,9 @@ async function ensureUniqueSku(baseSku: string, ignoreId?: string): Promise<stri
   }
 }
 
-async function getOrCreateFallbackCategory(excludedCategoryId: string): Promise<string> {
+async function getOrCreateFallbackCategory(
+  excludedCategoryId: string,
+): Promise<string> {
   const supabase = getSupabaseAdminClient();
   const existingResult = await supabase
     .from("categories")
@@ -554,7 +701,10 @@ async function getOrCreateFallbackCategory(excludedCategoryId: string): Promise<
     .select("id")
     .single();
 
-  if (createResult.error && isMissingColumnError(createResult.error, "image_url")) {
+  if (
+    createResult.error &&
+    isMissingColumnError(createResult.error, "image_url")
+  ) {
     createResult = await supabase
       .from("categories")
       .insert({
@@ -568,7 +718,9 @@ async function getOrCreateFallbackCategory(excludedCategoryId: string): Promise<
   }
 
   if (createResult.error || !createResult.data?.id) {
-    throw new Error(createResult.error?.message ?? "Unable to create fallback category.");
+    throw new Error(
+      createResult.error?.message ?? "Unable to create fallback category.",
+    );
   }
 
   return String(createResult.data.id);
@@ -603,10 +755,16 @@ export async function updateOrderStatus(formData: FormData) {
       orderResult.data && typeof orderResult.data.notes === "string"
         ? orderResult.data.notes
         : null;
-    nextNotes = appendFulfillmentNote(existingNotes, parsed.data.fulfillmentNote);
+    nextNotes = appendFulfillmentNote(
+      existingNotes,
+      parsed.data.fulfillmentNote,
+    );
   }
 
-  const baseUpdatePayload: { status: (typeof ORDER_STATUS_VALUES)[number]; notes?: string } = {
+  const baseUpdatePayload: {
+    status: (typeof ORDER_STATUS_VALUES)[number];
+    notes?: string;
+  } = {
     status: parsed.data.status,
   };
   if (nextNotes) {
@@ -646,7 +804,11 @@ export async function updateOrderStatus(formData: FormData) {
     return redirectAdminError("save_failed", redirectTo);
   }
 
-  if (["paid", "in_production", "fulfilled", "completed"].includes(parsed.data.status)) {
+  if (
+    ["paid", "in_production", "fulfilled", "completed"].includes(
+      parsed.data.status,
+    )
+  ) {
     try {
       await recordSaleMovementsForOrder(parsed.data.orderId, "admin_status");
     } catch {
@@ -682,7 +844,11 @@ export async function archiveOrder(formData: FormData) {
     return redirectAdminError("save_failed", redirectTo);
   }
 
-  const order = orderResult.data as { id: string; status: string; archived_at: string | null } | null;
+  const order = orderResult.data as {
+    id: string;
+    status: string;
+    archived_at: string | null;
+  } | null;
   if (!order) {
     return redirectAdminError("save_failed", redirectTo);
   }
@@ -866,7 +1032,9 @@ export async function saveUploadTransferPricing(formData: FormData) {
   const parsedOptions = optionIds.map((optionId, index) =>
     uploadProductOptionSchema.safeParse({
       id: optionId,
-      sortOrder: readUploadOptionField(formData, "sortOrder", optionId) ?? (index + 1) * 10,
+      sortOrder:
+        readUploadOptionField(formData, "sortOrder", optionId) ??
+        (index + 1) * 10,
       name: readUploadOptionField(formData, "name", optionId),
       description: readUploadOptionField(formData, "description", optionId),
       amountCents: readUploadOptionField(formData, "amountCents", optionId),
@@ -894,9 +1062,11 @@ export async function saveUploadTransferPricing(formData: FormData) {
   );
 
   const supabase = getSupabaseAdminClient();
-  const writeResult = await supabase.from("upload_product_options").upsert(rows, {
-    onConflict: "id",
-  });
+  const writeResult = await supabase
+    .from("upload_product_options")
+    .upsert(rows, {
+      onConflict: "id",
+    });
 
   if (writeResult.error) {
     return redirectAdminError("save_failed", redirectTo);
@@ -1007,6 +1177,8 @@ export async function saveContactPageContent(formData: FormData) {
     contactIntro: formData.get("contactIntro"),
     contactEmail: formData.get("contactEmail"),
     contactPhone: formData.get("contactPhone"),
+    contactAddress: formData.get("contactAddress"),
+    printLabelThankYouNote: formData.get("printLabelThankYouNote"),
     hoursTitle: formData.get("hoursTitle"),
     hoursWeekday: formData.get("hoursWeekday"),
     hoursSaturday: formData.get("hoursSaturday"),
@@ -1024,6 +1196,8 @@ export async function saveContactPageContent(formData: FormData) {
       contact_intro: parsed.data.contactIntro,
       contact_email: parsed.data.contactEmail,
       contact_phone: parsed.data.contactPhone,
+      contact_address: parsed.data.contactAddress,
+      contact_print_label_thank_you_note: parsed.data.printLabelThankYouNote,
       contact_hours_title: parsed.data.hoursTitle,
       contact_hours_weekday: parsed.data.hoursWeekday,
       contact_hours_saturday: parsed.data.hoursSaturday,
@@ -1067,7 +1241,10 @@ export async function createCategory(formData: FormData) {
     active: parsed.data.active,
   });
 
-  if (insertResult.error && isMissingColumnError(insertResult.error, "image_url")) {
+  if (
+    insertResult.error &&
+    isMissingColumnError(insertResult.error, "image_url")
+  ) {
     insertResult = await supabase.from("categories").insert({
       name: parsed.data.name,
       slug,
@@ -1123,7 +1300,10 @@ export async function updateCategory(formData: FormData) {
     })
     .eq("id", parsed.data.categoryId);
 
-  if (updateResult.error && isMissingColumnError(updateResult.error, "image_url")) {
+  if (
+    updateResult.error &&
+    isMissingColumnError(updateResult.error, "image_url")
+  ) {
     updateResult = await supabase
       .from("categories")
       .update({
@@ -1158,7 +1338,9 @@ export async function deleteCategory(formData: FormData) {
   const supabase = getSupabaseAdminClient();
   let fallbackCategoryId = "";
   try {
-    fallbackCategoryId = await getOrCreateFallbackCategory(parsed.data.categoryId);
+    fallbackCategoryId = await getOrCreateFallbackCategory(
+      parsed.data.categoryId,
+    );
   } catch {
     return redirectAdminError("save_failed", redirectTo);
   }
@@ -1224,7 +1406,10 @@ export async function createProduct(formData: FormData) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let slug = "";
     try {
-      slug = await generateProductSlug(parsed.data.categoryId, parsed.data.title);
+      slug = await generateProductSlug(
+        parsed.data.categoryId,
+        parsed.data.title,
+      );
     } catch {
       return redirectAdminError("save_failed", redirectTo);
     }
@@ -1322,7 +1507,9 @@ export async function updateProductCard(formData: FormData) {
     return redirectAdminError("save_failed", redirectTo);
   }
 
-  const previousPriceCents = Number(currentProductResult.data?.price_cents ?? 0);
+  const previousPriceCents = Number(
+    currentProductResult.data?.price_cents ?? 0,
+  );
 
   const updateResult = await supabase
     .from("products")
@@ -1358,7 +1545,10 @@ export async function updateProductCard(formData: FormData) {
 
     if (
       clearMirroredOverridesResult.error &&
-      !isMissingTableError(clearMirroredOverridesResult.error, "product_variants")
+      !isMissingTableError(
+        clearMirroredOverridesResult.error,
+        "product_variants",
+      )
     ) {
       return redirectAdminError("save_failed", redirectTo);
     }
@@ -1381,7 +1571,10 @@ export async function deleteProductCard(formData: FormData) {
   }
 
   const supabase = getSupabaseAdminClient();
-  const deleteResult = await supabase.from("products").delete().eq("id", parsed.data.productId);
+  const deleteResult = await supabase
+    .from("products")
+    .delete()
+    .eq("id", parsed.data.productId);
 
   if (deleteResult.error) {
     return redirectAdminError("save_failed", redirectTo);
@@ -1616,7 +1809,10 @@ export async function deleteWelcomePost(formData: FormData) {
   }
 
   const supabase = getSupabaseAdminClient();
-  const deleteResult = await supabase.from("welcome_posts").delete().eq("id", parsed.data.postId);
+  const deleteResult = await supabase
+    .from("welcome_posts")
+    .delete()
+    .eq("id", parsed.data.postId);
 
   if (deleteResult.error) {
     return redirectAdminError("save_failed");
@@ -1635,6 +1831,8 @@ export async function savePromoPopup(formData: FormData) {
     title: formData.get("title"),
     message: formData.get("message"),
     ctaText: formData.get("ctaText"),
+    popupCtaMode: formData.get("popupCtaMode") || undefined,
+    ctaSlug: formData.get("ctaSlug") || undefined,
     ctaHref: formData.get("ctaHref") || "/shop",
     productId: formData.get("productId") || undefined,
   });
@@ -1645,9 +1843,32 @@ export async function savePromoPopup(formData: FormData) {
 
   const normalizedPromoLabel = parsed.data.promoLabel?.trim() || "Hot Item";
   const normalizedTitle = parsed.data.title?.trim() || "Get it now!";
-  const normalizedMessage = parsed.data.message?.trim() || "Hot item just dropped.";
+  const normalizedMessage =
+    parsed.data.message?.trim() || "Hot item just dropped.";
   const normalizedCtaText = parsed.data.ctaText?.trim() || "I gotta have it!";
-  const normalizedCtaHref = parsed.data.ctaHref?.trim() || "/shop";
+  const popupMode =
+    parsed.data.popupCtaMode ?? (parsed.data.productId ? "inventory" : "slug");
+  const normalizedFallbackCtaHref = normalizePopupHref(parsed.data.ctaHref);
+  const normalizedSlug = normalizePopupSlug(parsed.data.ctaSlug);
+  let resolvedProductId: string | null = null;
+  let resolvedCtaHref = normalizedFallbackCtaHref;
+
+  if (popupMode === "inventory") {
+    const target = await resolvePopupProductTarget({
+      productId: parsed.data.productId,
+      slug: normalizedSlug,
+    });
+    if (target) {
+      resolvedProductId = target.id;
+      resolvedCtaHref = `/shop/${target.slug}`;
+    } else if (normalizedSlug) {
+      resolvedCtaHref = `/shop/${normalizedSlug}`;
+    }
+  } else {
+    if (normalizedSlug) {
+      resolvedCtaHref = `/shop/${normalizedSlug}`;
+    }
+  }
 
   const supabase = getSupabaseAdminClient();
   let upsertResult = await supabase.from("promo_popups").upsert(
@@ -1659,8 +1880,8 @@ export async function savePromoPopup(formData: FormData) {
       title: normalizedTitle,
       message: normalizedMessage,
       cta_text: normalizedCtaText,
-      cta_href: normalizedCtaHref,
-      product_id: parsed.data.productId ?? null,
+      cta_href: resolvedCtaHref,
+      product_id: resolvedProductId,
     },
     {
       onConflict: "singleton_key",
@@ -1676,7 +1897,7 @@ export async function savePromoPopup(formData: FormData) {
         title: normalizedTitle,
         message: normalizedMessage,
         cta_text: normalizedCtaText,
-        product_id: parsed.data.productId ?? null,
+        product_id: resolvedProductId,
       },
       {
         onConflict: "singleton_key",

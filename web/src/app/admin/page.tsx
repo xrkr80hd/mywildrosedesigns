@@ -1,41 +1,42 @@
-﻿
-import Link from "next/link";
-import type { ReactNode } from "react";
-import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
+﻿import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
 import { AdminConfirmSubmitButton } from "@/components/admin-confirm-submit-button";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
+import { AdminPopupProductSelector } from "@/components/admin-popup-product-selector";
 import { PrintOrderLabelButton } from "@/components/print-order-label-button";
 import { ShareProductButton } from "@/components/share-product-button";
+import { getUploadBucket } from "@/lib/env";
 import { parseFulfillmentNotes } from "@/lib/fulfillment-notes";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import type { ProductOptionAdminRow } from "@/lib/product-options-store";
 import { getUploadProductOptionsForAdmin } from "@/lib/product-options-store";
-import { getUploadBucket } from "@/lib/env";
+import { getSiteContentSettings } from "@/lib/site-content";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import Link from "next/link";
+import type { ReactNode } from "react";
 import {
-  archiveOrder,
-  archiveResolvedOrders,
-  clearArchivedOrders,
-  createUploadTransferOption,
-  createCategory,
-  createProduct,
-  createProductVariant,
-  deleteUploadTransferOption,
-  createWelcomePost,
-  deleteCategory,
-  deleteProductCard,
-  deleteProductVariant,
-  deleteWelcomePost,
-  saveHomepageSettings,
-  saveUploadTransferPricing,
-  savePromoPopup,
-  unarchiveOrder,
-  updateCategory,
-  updateContactMessage,
-  updateOrderStatus,
-  updateProductCard,
-  updateProductVariant,
-  updateWelcomePost,
+    archiveOrder,
+    archiveResolvedOrders,
+    clearArchivedOrders,
+    createCategory,
+    createProduct,
+    createProductVariant,
+    createUploadTransferOption,
+    createWelcomePost,
+    deleteCategory,
+    deleteProductCard,
+    deleteProductVariant,
+    deleteUploadTransferOption,
+    deleteWelcomePost,
+    saveHomepageSettings,
+    savePromoPopup,
+    saveUploadTransferPricing,
+    unarchiveOrder,
+    updateCategory,
+    updateContactMessage,
+    updateOrderStatus,
+    updateProductCard,
+    updateProductVariant,
+    updateWelcomePost,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +126,8 @@ type PopupRow = {
   cta_href: string;
   product_id: string | null;
 };
+
+type PopupCtaMode = "slug" | "inventory";
 
 type WelcomePostRow = {
   id: string;
@@ -242,6 +245,27 @@ function formatDateTime(value: string | null) {
   return new Date(value).toLocaleString();
 }
 
+function extractShopSlugFromHref(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/shop/")) {
+    return "";
+  }
+
+  const withoutHash = trimmed.split("#")[0] ?? "";
+  const withoutQuery = withoutHash.split("?")[0] ?? "";
+  const slug = withoutQuery.replace(/^\/shop\//, "").replace(/\/+$/, "");
+
+  if (!slug) {
+    return "";
+  }
+
+  try {
+    return decodeURIComponent(slug);
+  } catch {
+    return slug;
+  }
+}
+
 function orderStatusBadgeClass(status: string): string {
   switch (status) {
     case "pending_payment":
@@ -275,7 +299,9 @@ function messageStatusBadgeClass(status: ContactMessageRow["status"]): string {
 }
 
 function isArchivableOrderStatus(status: string): boolean {
-  return status === "fulfilled" || status === "completed" || status === "cancelled";
+  return (
+    status === "fulfilled" || status === "completed" || status === "cancelled"
+  );
 }
 
 function formatOrderStatusLabel(status: string): string {
@@ -299,8 +325,13 @@ function isMissingTableError(error: unknown, tableName: string): boolean {
     return false;
   }
 
-  const candidate = error as { code?: string; message?: string; details?: string };
-  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+  const text =
+    `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
   return candidate.code === "42P01" || text.includes(tableName.toLowerCase());
 }
 
@@ -309,10 +340,17 @@ function isMissingColumnError(error: unknown, columnName: string): boolean {
     return false;
   }
 
-  const candidate = error as { code?: string; message?: string; details?: string };
-  const text = `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
-  return candidate.code === "42703" ||
-    (text.includes(columnName.toLowerCase()) && text.includes("does not exist"));
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+  const text =
+    `${candidate.message ?? ""} ${candidate.details ?? ""}`.toLowerCase();
+  return (
+    candidate.code === "42703" ||
+    (text.includes(columnName.toLowerCase()) && text.includes("does not exist"))
+  );
 }
 
 function formatVariantLabel(variant: ProductVariantRow): string {
@@ -333,7 +371,10 @@ async function getOrders(orderView: OrderView): Promise<OrderWithFileLink[]> {
     .order("created_at", { ascending: false })
     .limit(400);
 
-  if (primaryResult.error && isMissingColumnError(primaryResult.error, "archived_at")) {
+  if (
+    primaryResult.error &&
+    isMissingColumnError(primaryResult.error, "archived_at")
+  ) {
     includeArchiveColumns = false;
     const fallbackResult = await supabase
       .from("orders")
@@ -368,19 +409,27 @@ async function getOrders(orderView: OrderView): Promise<OrderWithFileLink[]> {
     design_path: String(order.design_path ?? ""),
     paid_at: order.paid_at ? String(order.paid_at) : null,
     archived_at:
-      includeArchiveColumns && order.archived_at ? String(order.archived_at) : null,
+      includeArchiveColumns && order.archived_at
+        ? String(order.archived_at)
+        : null,
     archived_by:
-      includeArchiveColumns && order.archived_by ? String(order.archived_by) : null,
+      includeArchiveColumns && order.archived_by
+        ? String(order.archived_by)
+        : null,
   })) as OrderRow[];
 
   const filteredRows =
     orderView === "archived"
-      ? rows.filter((order) => Boolean(order.archived_at) && order.status !== "fulfilled")
+      ? rows.filter(
+          (order) => Boolean(order.archived_at) && order.status !== "fulfilled",
+        )
       : orderView === "fulfilled"
         ? rows.filter((order) => order.status === "fulfilled")
-      : orderView === "active"
-        ? rows.filter((order) => !order.archived_at && order.status !== "fulfilled")
-        : rows;
+        : orderView === "active"
+          ? rows.filter(
+              (order) => !order.archived_at && order.status !== "fulfilled",
+            )
+          : rows;
 
   const bucket = getUploadBucket();
 
@@ -410,7 +459,10 @@ async function getOrderAttentionSummary() {
     .order("created_at", { ascending: false })
     .limit(500);
 
-  if (primaryResult.error && isMissingColumnError(primaryResult.error, "archived_at")) {
+  if (
+    primaryResult.error &&
+    isMissingColumnError(primaryResult.error, "archived_at")
+  ) {
     const fallbackResult = await supabase
       .from("orders")
       .select("id, status, created_at")
@@ -450,12 +502,12 @@ async function getCategories() {
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true });
 
-    return ((fallbackResult.data ?? []) as Array<Omit<CategoryRow, "image_url">>).map(
-      (category) => ({
-        ...category,
-        image_url: null,
-      }),
-    );
+    return (
+      (fallbackResult.data ?? []) as Array<Omit<CategoryRow, "image_url">>
+    ).map((category) => ({
+      ...category,
+      image_url: null,
+    }));
   }
 
   return (result.data ?? []) as CategoryRow[];
@@ -505,7 +557,9 @@ async function getProductVariants() {
 
 async function getFunnelEvents() {
   const supabase = getSupabaseAdminClient();
-  const thirtyDaysAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString();
+  const thirtyDaysAgo = new Date(
+    Date.now() - 1000 * 60 * 60 * 24 * 30,
+  ).toISOString();
   const result = await supabase
     .from("funnel_events")
     .select("event_type, created_at")
@@ -618,7 +672,9 @@ async function getPopup() {
   const supabase = getSupabaseAdminClient();
   const result = await supabase
     .from("promo_popups")
-    .select("enabled, show_cta, promo_label, title, message, cta_text, cta_href, product_id")
+    .select(
+      "enabled, show_cta, promo_label, title, message, cta_text, cta_href, product_id",
+    )
     .eq("singleton_key", "main")
     .maybeSingle();
 
@@ -717,9 +773,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       ? "archived"
       : normalizedOrderView === "fulfilled"
         ? "fulfilled"
-      : normalizedOrderView === "all"
-        ? "all"
-        : "active";
+        : normalizedOrderView === "all"
+          ? "all"
+          : "active";
 
   const [
     orders,
@@ -729,28 +785,31 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     productVariants,
     homepage,
     popup,
+    siteContent,
     welcomePosts,
     messages,
     uploadOptions,
     saleMovements,
     funnelEvents,
-  ] =
-    await Promise.all([
-      getOrders(orderView),
-      getOrderAttentionSummary(),
-      getCategories(),
-      getProducts(),
-      getProductVariants(),
-      getHomepageSettings(),
-      getPopup(),
-      getWelcomePosts(),
-      getContactMessages(),
-      getUploadProductOptionsForAdmin(),
-      getSaleMovements(),
-      getFunnelEvents(),
-    ]);
+  ] = await Promise.all([
+    getOrders(orderView),
+    getOrderAttentionSummary(),
+    getCategories(),
+    getProducts(),
+    getProductVariants(),
+    getHomepageSettings(),
+    getPopup(),
+    getSiteContentSettings(),
+    getWelcomePosts(),
+    getContactMessages(),
+    getUploadProductOptionsForAdmin(),
+    getSaleMovements(),
+    getFunnelEvents(),
+  ]);
 
-  const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
+  const categoryNameById = new Map(
+    categories.map((category) => [category.id, category.name]),
+  );
   const inventoryGroups: InventoryGroup[] = categories.map((category) => ({
     id: category.id,
     label: category.name,
@@ -768,8 +827,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     });
   }
 
-  const newMessageCount = messages.filter((message) => message.status === "new").length;
-  const latestMessageId = messages.find((message) => message.status === "new")?.id ?? null;
+  const newMessageCount = messages.filter(
+    (message) => message.status === "new",
+  ).length;
+  const latestMessageId =
+    messages.find((message) => message.status === "new")?.id ?? null;
   const newOrderCount = orderAttention.newOrderCount;
   const latestOrderId = orderAttention.latestOrderId;
   const bestSellerRows = buildBestSellerRows(products, saleMovements);
@@ -788,6 +850,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       : `/admin?orderView=${nextView}#orders-uploads`;
   const orderRedirectTo = (orderId?: string) =>
     `${orderViewBasePath}${orderId ? `#order-${orderId}` : "#orders-uploads"}`;
+  const popupDefaultMode: PopupCtaMode = popup.product_id ? "inventory" : "slug";
+  const popupLinkedProduct = popup.product_id
+    ? products.find((product) => product.id === popup.product_id) ?? null
+    : null;
+  const popupDefaultSlug =
+    popupLinkedProduct?.slug ?? extractShopSlugFromHref(popup.cta_href);
 
   return (
     <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-6 py-10">
@@ -803,7 +871,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
         <details className="mt-5 rounded-2xl border border-rose/20 bg-white/70 p-3 md:hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-forest">Admin Menu</span>
+            <span className="text-sm font-semibold text-forest">
+              Admin Menu
+            </span>
             <span aria-hidden="true" className="inline-flex flex-col gap-1">
               <span className="h-[2px] w-5 bg-forest" />
               <span className="h-[2px] w-5 bg-forest" />
@@ -834,7 +904,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
         <div className="mt-5 hidden gap-3 md:grid md:grid-cols-3">
           {ADMIN_NAV_GROUPS.map((group) => (
-            <section key={group.title} className="rounded-2xl border border-rose/20 bg-white/70 p-3">
+            <section
+              key={group.title}
+              className="rounded-2xl border border-rose/20 bg-white/70 p-3"
+            >
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
                 {group.title}
               </p>
@@ -866,37 +939,88 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         title="Homepage Hero"
         description="This controls the top-left copy block on the home page."
       >
-        <form action={saveHomepageSettings} className="mt-4 grid gap-3 md:grid-cols-2">
+        <form
+          action={saveHomepageSettings}
+          className="mt-4 grid gap-3 md:grid-cols-2"
+        >
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Badge</span>
-            <input name="heroBadge" defaultValue={homepage.hero_badge} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Badge
+            </span>
+            <input
+              name="heroBadge"
+              defaultValue={homepage.hero_badge}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span>
-            <input name="heroTitle" defaultValue={homepage.hero_title} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Title
+            </span>
+            <input
+              name="heroTitle"
+              defaultValue={homepage.hero_title}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span>
-            <textarea name="heroDescription" rows={3} defaultValue={homepage.hero_description} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Description
+            </span>
+            <textarea
+              name="heroDescription"
+              rows={3}
+              defaultValue={homepage.hero_description}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Primary CTA Label</span>
-            <input name="primaryCtaLabel" defaultValue={homepage.primary_cta_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Primary CTA Label
+            </span>
+            <input
+              name="primaryCtaLabel"
+              defaultValue={homepage.primary_cta_label}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Primary CTA Link</span>
-            <input name="primaryCtaHref" defaultValue={homepage.primary_cta_href} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Primary CTA Link
+            </span>
+            <input
+              name="primaryCtaHref"
+              defaultValue={homepage.primary_cta_href}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Secondary CTA Label</span>
-            <input name="secondaryCtaLabel" defaultValue={homepage.secondary_cta_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Secondary CTA Label
+            </span>
+            <input
+              name="secondaryCtaLabel"
+              defaultValue={homepage.secondary_cta_label}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Secondary CTA Link</span>
-            <input name="secondaryCtaHref" defaultValue={homepage.secondary_cta_href} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Secondary CTA Link
+            </span>
+            <input
+              name="secondaryCtaHref"
+              defaultValue={homepage.secondary_cta_href}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <div className="md:col-span-2">
-            <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Save Homepage Hero</button>
+            <button
+              type="submit"
+              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+            >
+              Save Homepage Hero
+            </button>
           </div>
         </form>
       </AdminDropdownSection>
@@ -906,44 +1030,152 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         title="Promotional Popup"
         description="This controls the popup modal only. It is separate from featured products and homepage feature cards."
       >
-        <form action={savePromoPopup} className="mt-4 grid gap-3 md:grid-cols-2">
+        <form
+          action={savePromoPopup}
+          className="mt-4 grid gap-3 md:grid-cols-2"
+        >
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Popup Label</span>
-            <input name="promoLabel" defaultValue={popup.promo_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Popup Label
+            </span>
+            <input
+              name="promoLabel"
+              defaultValue={popup.promo_label}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span>
-            <input name="title" defaultValue={popup.title} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Title
+            </span>
+            <input
+              name="title"
+              defaultValue={popup.title}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">CTA Text</span>
-            <input name="ctaText" defaultValue={popup.cta_text} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              CTA Text
+            </span>
+            <input
+              name="ctaText"
+              defaultValue={popup.cta_text}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              CTA Target Mode
+            </legend>
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-forest">
+              <input
+                type="radio"
+                name="popupCtaMode"
+                value="slug"
+                defaultChecked={popupDefaultMode === "slug"}
+              />
+              Slug entry
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-forest">
+              <input
+                type="radio"
+                name="popupCtaMode"
+                value="inventory"
+                defaultChecked={popupDefaultMode === "inventory"}
+              />
+              Inventory selection
+            </label>
+          </fieldset>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">CTA Link</span>
-            <input name="ctaHref" defaultValue={popup.cta_href} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              CTA Slug (slug mode)
+            </span>
+            <input
+              name="ctaSlug"
+              defaultValue={popupDefaultSlug}
+              placeholder="example-product-slug"
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-foreground/65">
+              Slug mode resolves to <code>/shop/[slug]</code>.
+            </p>
           </label>
           <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Message</span>
-            <textarea name="message" rows={2} defaultValue={popup.message} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Message
+            </span>
+            <textarea
+              name="message"
+              rows={2}
+              defaultValue={popup.message}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Product</span>
-            <select name="productId" defaultValue={popup.product_id ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm">
-              <option value="">No product selected</option>
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>{product.title}</option>
-              ))}
-            </select>
+          <label className="space-y-1 md:col-span-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Inventory Target (searchable)
+            </span>
+            <AdminPopupProductSelector
+              products={products.map((product) => ({
+                id: product.id,
+                title: product.title,
+                slug: product.slug,
+                sku: product.sku,
+                active: product.active,
+              }))}
+              defaultProductId={popup.product_id}
+            />
+            <p className="text-xs text-foreground/65">
+              Inventory mode links CTA to a selected product while keeping frontend popup behavior unchanged.
+            </p>
+          </label>
+          <label className="space-y-1 md:col-span-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Fallback CTA Link
+            </span>
+            <input
+              name="ctaHref"
+              defaultValue={popup.cta_href}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-foreground/65">
+              Used when slug mode has no slug or no inventory item is selected.
+            </p>
+          </label>
+          <label className="space-y-1 md:col-span-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Current Product Link
+            </span>
+            <p className="rounded-xl border border-rose/20 bg-surface px-3 py-2 text-sm text-foreground/80">
+              {popupLinkedProduct
+                ? `${popupLinkedProduct.title} (${popupLinkedProduct.slug})`
+                : "No product linked"}
+            </p>
           </label>
           <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
-            <input type="checkbox" name="enabled" defaultChecked={popup.enabled} /> Popup enabled
+            <input
+              type="checkbox"
+              name="enabled"
+              defaultChecked={popup.enabled}
+            />{" "}
+            Popup enabled
           </label>
           <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
-            <input type="checkbox" name="showCta" defaultChecked={popup.show_cta} /> Show CTA button
+            <input
+              type="checkbox"
+              name="showCta"
+              defaultChecked={popup.show_cta}
+            />{" "}
+            Show CTA button
           </label>
           <div className="md:col-span-2">
-            <button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">Save Popup</button>
+            <button
+              type="submit"
+              className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
+            >
+              Save Popup
+            </button>
           </div>
         </form>
       </AdminDropdownSection>
@@ -953,52 +1185,160 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         title="Homepage Feature Cards"
         description="Edit cards shown on Home under Homepage Highlights (not the popup modal)."
       >
-
-        <form action={createWelcomePost} className="mt-4 grid gap-3 rounded-2xl border border-rose/15 bg-surface p-4 md:grid-cols-2">
+        <form
+          action={createWelcomePost}
+          className="mt-4 grid gap-3 rounded-2xl border border-rose/15 bg-surface p-4 md:grid-cols-2"
+        >
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span>
-            <input name="title" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Title
+            </span>
+            <input
+              name="title"
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span>
-            <input name="sortOrder" type="number" defaultValue={10} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Sort Order
+            </span>
+            <input
+              name="sortOrder"
+              type="number"
+              defaultValue={10}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Body</span>
-            <textarea name="body" rows={2} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Body
+            </span>
+            <textarea
+              name="body"
+              rows={2}
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">CTA Label</span>
-            <input name="ctaLabel" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              CTA Label
+            </span>
+            <input
+              name="ctaLabel"
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">CTA Link</span>
-            <input name="ctaHref" defaultValue="/shop" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              CTA Link
+            </span>
+            <input
+              name="ctaHref"
+              defaultValue="/shop"
+              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+            />
           </label>
           <label className="inline-flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" name="active" defaultChecked /> Active
           </label>
           <div className="md:col-span-2">
-            <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Add Welcome Card</button>
+            <button
+              type="submit"
+              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+            >
+              Add Welcome Card
+            </button>
           </div>
         </form>
 
         <div className="mt-4 space-y-3">
           {welcomePosts.map((post) => (
-            <article key={post.id} className="rounded-2xl border border-rose/20 bg-white p-4">
-              <form action={updateWelcomePost} className="grid gap-3 md:grid-cols-2">
+            <article
+              key={post.id}
+              className="rounded-2xl border border-rose/20 bg-white p-4"
+            >
+              <form
+                action={updateWelcomePost}
+                className="grid gap-3 md:grid-cols-2"
+              >
                 <input type="hidden" name="postId" value={post.id} />
-                <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span><input name="title" defaultValue={post.title} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span><input name="sortOrder" type="number" defaultValue={post.sort_order} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Body</span><textarea name="body" rows={2} defaultValue={post.body} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">CTA Label</span><input name="ctaLabel" defaultValue={post.cta_label ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">CTA Link</span><input name="ctaHref" defaultValue={post.cta_href ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="active" defaultChecked={post.active} /> Active</label>
-                <div className="md:col-span-2"><button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Save Card</button></div>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Title
+                  </span>
+                  <input
+                    name="title"
+                    defaultValue={post.title}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Sort Order
+                  </span>
+                  <input
+                    name="sortOrder"
+                    type="number"
+                    defaultValue={post.sort_order}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Body
+                  </span>
+                  <textarea
+                    name="body"
+                    rows={2}
+                    defaultValue={post.body}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    CTA Label
+                  </span>
+                  <input
+                    name="ctaLabel"
+                    defaultValue={post.cta_label ?? ""}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    CTA Link
+                  </span>
+                  <input
+                    name="ctaHref"
+                    defaultValue={post.cta_href ?? ""}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input
+                    type="checkbox"
+                    name="active"
+                    defaultChecked={post.active}
+                  />{" "}
+                  Active
+                </label>
+                <div className="md:col-span-2">
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Save Card
+                  </button>
+                </div>
               </form>
               <form action={deleteWelcomePost} className="mt-2">
                 <input type="hidden" name="postId" value={post.id} />
-                <button type="submit" className="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">Delete Card</button>
+                <button
+                  type="submit"
+                  className="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                >
+                  Delete Card
+                </button>
               </form>
             </article>
           ))}
@@ -1015,9 +1355,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           action={createUploadTransferOption}
           className="mt-4 grid gap-3 rounded-2xl border border-rose/20 bg-white p-4 md:grid-cols-2"
         >
-          <input type="hidden" name="redirectTo" value="/admin#upload-transfer-pricing" />
+          <input
+            type="hidden"
+            name="redirectTo"
+            value="/admin#upload-transfer-pricing"
+          />
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">New Option Name</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              New Option Name
+            </span>
             <input
               name="name"
               placeholder="Custom Transfer"
@@ -1025,7 +1371,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Price (USD)
+            </span>
             <input
               name="amountCents"
               type="number"
@@ -1036,7 +1384,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             />
           </label>
           <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Description
+            </span>
             <textarea
               name="description"
               rows={2}
@@ -1045,7 +1395,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Sort Order
+            </span>
             <input
               name="sortOrder"
               type="number"
@@ -1058,23 +1410,35 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             Option active
           </label>
           <div className="md:col-span-2">
-            <button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">
+            <button
+              type="submit"
+              className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
+            >
               Add Custom Transfer
             </button>
           </div>
         </form>
 
         <form action={saveUploadTransferPricing} className="mt-4 space-y-3">
-          <input type="hidden" name="redirectTo" value="/admin#upload-transfer-pricing" />
+          <input
+            type="hidden"
+            name="redirectTo"
+            value="/admin#upload-transfer-pricing"
+          />
           {uploadOptions.map((option: ProductOptionAdminRow) => (
-            <article key={option.id} className="rounded-2xl border border-rose/20 bg-white p-4">
+            <article
+              key={option.id}
+              className="rounded-2xl border border-rose/20 bg-white p-4"
+            >
               <input type="hidden" name="optionIds" value={option.id} />
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
                 {option.id}
               </p>
               <div className="mt-2 grid gap-3 md:grid-cols-2">
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Sort Order
+                  </span>
                   <input
                     name={`sortOrder_${option.id}`}
                     type="number"
@@ -1083,7 +1447,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Name</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Name
+                  </span>
                   <input
                     name={`name_${option.id}`}
                     defaultValue={option.name}
@@ -1091,7 +1457,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Price (USD)
+                  </span>
                   <input
                     name={`amountCents_${option.id}`}
                     type="number"
@@ -1102,7 +1470,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   />
                 </label>
                 <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Description
+                  </span>
                   <textarea
                     name={`description_${option.id}`}
                     rows={2}
@@ -1111,12 +1481,18 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   />
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <input type="checkbox" name={`active_${option.id}`} defaultChecked={option.active} />
+                  <input
+                    type="checkbox"
+                    name={`active_${option.id}`}
+                    defaultChecked={option.active}
+                  />
                   Option active
                 </label>
                 {option.id.startsWith("custom-") ? (
                   <div className="flex items-center justify-between gap-2 md:col-span-2">
-                    <p className="text-xs font-semibold text-foreground/70">Custom option</p>
+                    <p className="text-xs font-semibold text-foreground/70">
+                      Custom option
+                    </p>
                     <button
                       type="submit"
                       name="optionId"
@@ -1132,7 +1508,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             </article>
           ))}
           <div>
-            <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">
+            <button
+              type="submit"
+              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+            >
               Save Transfer Pricing
             </button>
           </div>
@@ -1146,17 +1525,24 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       >
         {bestSellerRows.length === 0 ? (
           <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm text-foreground/75">
-            No paid cart sales recorded yet. As paid orders come in, this list will populate automatically.
+            No paid cart sales recorded yet. As paid orders come in, this list
+            will populate automatically.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-rose/20 bg-white">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-surface">
                 <tr>
-                  <th className="px-4 py-3 font-semibold text-forest">Product</th>
+                  <th className="px-4 py-3 font-semibold text-forest">
+                    Product
+                  </th>
                   <th className="px-4 py-3 font-semibold text-forest">SKU</th>
-                  <th className="px-4 py-3 font-semibold text-forest">Units Sold</th>
-                  <th className="px-4 py-3 font-semibold text-forest">Paid Orders</th>
+                  <th className="px-4 py-3 font-semibold text-forest">
+                    Units Sold
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-forest">
+                    Paid Orders
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1164,7 +1550,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   <tr key={row.productId} className="border-t border-rose/15">
                     <td className="px-4 py-3">{row.title}</td>
                     <td className="px-4 py-3">{row.sku}</td>
-                    <td className="px-4 py-3 font-semibold text-forest">{row.unitsSold}</td>
+                    <td className="px-4 py-3 font-semibold text-forest">
+                      {row.unitsSold}
+                    </td>
                     <td className="px-4 py-3">{row.orderCount}</td>
                   </tr>
                 ))}
@@ -1181,26 +1569,42 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       >
         <div className="grid gap-3 md:grid-cols-4">
           <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">View Product</p>
-            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.view_product}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              View Product
+            </p>
+            <p className="mt-1 text-2xl font-bold text-forest">
+              {funnelSummary.counts.view_product}
+            </p>
           </article>
           <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Add to Cart</p>
-            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.add_to_cart}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Add to Cart
+            </p>
+            <p className="mt-1 text-2xl font-bold text-forest">
+              {funnelSummary.counts.add_to_cart}
+            </p>
             <p className="mt-1 text-xs text-foreground/70">
               {funnelSummary.addRate} from views
             </p>
           </article>
           <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Start Checkout</p>
-            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.start_checkout}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Start Checkout
+            </p>
+            <p className="mt-1 text-2xl font-bold text-forest">
+              {funnelSummary.counts.start_checkout}
+            </p>
             <p className="mt-1 text-xs text-foreground/70">
               {funnelSummary.checkoutRate} from add-to-cart
             </p>
           </article>
           <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Paid</p>
-            <p className="mt-1 text-2xl font-bold text-forest">{funnelSummary.counts.paid}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+              Paid
+            </p>
+            <p className="mt-1 text-2xl font-bold text-forest">
+              {funnelSummary.counts.paid}
+            </p>
             <p className="mt-1 text-xs text-foreground/70">
               {funnelSummary.paidRate} from checkout starts
             </p>
@@ -1227,18 +1631,52 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               &#9662;
             </span>
           </summary>
-          <form action={createCategory} className="mt-3 grid gap-3 md:grid-cols-2">
-            <input type="hidden" name="redirectTo" value="/admin#category-create" />
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Name</span><input name="name" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span><input name="sortOrder" type="number" defaultValue={100} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+          <form
+            action={createCategory}
+            className="mt-3 grid gap-3 md:grid-cols-2"
+          >
+            <input
+              type="hidden"
+              name="redirectTo"
+              value="/admin#category-create"
+            />
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Name
+              </span>
+              <input
+                name="name"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Sort Order
+              </span>
+              <input
+                name="sortOrder"
+                type="number"
+                defaultValue={100}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
             <AdminImageUploadField
               name="imageUrl"
               className="md:col-span-2"
               recommendedSize="1200 x 800 px"
               helperText="Optional category image. This image URL is stored on the category record."
             />
-            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="active" defaultChecked /> Active</label>
-            <div className="md:col-span-2"><button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Add Category</button></div>
+            <label className="inline-flex items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" name="active" defaultChecked /> Active
+            </label>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+              >
+                Add Category
+              </button>
+            </div>
           </form>
         </details>
 
@@ -1252,11 +1690,17 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             >
               <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-forest">{category.name}</p>
-                  <p className="text-xs text-foreground/70">/{category.slug} | Sort {category.sort_order}</p>
+                  <p className="text-sm font-semibold text-forest">
+                    {category.name}
+                  </p>
+                  <p className="text-xs text-foreground/70">
+                    /{category.slug} | Sort {category.sort_order}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${category.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${category.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}
+                  >
                     {category.active ? "Active" : "Hidden"}
                   </span>
                   <span
@@ -1268,13 +1712,55 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 </div>
               </summary>
 
-              <form action={updateCategory} className="mt-3 grid gap-3 md:grid-cols-2">
+              <form
+                action={updateCategory}
+                className="mt-3 grid gap-3 md:grid-cols-2"
+              >
                 <input type="hidden" name="categoryId" value={category.id} />
-                <input type="hidden" name="redirectTo" value={`/admin#category-${category.id}`} />
-                <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Name</span><input name="name" defaultValue={category.name} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Slug</span><input name="slug" defaultValue={category.slug} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sort Order</span><input name="sortOrder" type="number" defaultValue={category.sort_order} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7"><input type="checkbox" name="active" defaultChecked={category.active} /> Active</label>
+                <input
+                  type="hidden"
+                  name="redirectTo"
+                  value={`/admin#category-${category.id}`}
+                />
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Name
+                  </span>
+                  <input
+                    name="name"
+                    defaultValue={category.name}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Slug
+                  </span>
+                  <input
+                    name="slug"
+                    defaultValue={category.slug}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                    Sort Order
+                  </span>
+                  <input
+                    name="sortOrder"
+                    type="number"
+                    defaultValue={category.sort_order}
+                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+                  <input
+                    type="checkbox"
+                    name="active"
+                    defaultChecked={category.active}
+                  />{" "}
+                  Active
+                </label>
                 <AdminImageUploadField
                   name="imageUrl"
                   defaultValue={category.image_url ?? ""}
@@ -1283,7 +1769,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   helperText="Optional category image. Upload a new one to replace the current URL."
                 />
                 <div className="md:col-span-2">
-                  <button type="submit" className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white">
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
+                  >
                     Save Category
                   </button>
                 </div>
@@ -1291,7 +1780,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
               <form action={deleteCategory} className="mt-2">
                 <input type="hidden" name="categoryId" value={category.id} />
-                <input type="hidden" name="redirectTo" value={`/admin#category-${category.id}`} />
+                <input
+                  type="hidden"
+                  name="redirectTo"
+                  value={`/admin#category-${category.id}`}
+                />
                 <AdminConfirmSubmitButton
                   buttonLabel="Delete Category (Keep Items)"
                   confirmMessage="Are you sure you'd like to delete this category? Items will be kept and moved to Uncategorized."
@@ -1323,12 +1816,62 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               &#9662;
             </span>
           </summary>
-          <form action={createProduct} className="mt-3 grid gap-3 md:grid-cols-2">
-            <input type="hidden" name="redirectTo" value="/admin#product-create" />
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span><input name="title" required className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Category</span><select name="categoryId" required className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm">{categories.map((category) => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></label>
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">SKU (optional override)</span><input name="sku" placeholder="Leave blank to auto-generate from category" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-            <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span><textarea name="description" required rows={2} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+          <form
+            action={createProduct}
+            className="mt-3 grid gap-3 md:grid-cols-2"
+          >
+            <input
+              type="hidden"
+              name="redirectTo"
+              value="/admin#product-create"
+            />
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Title
+              </span>
+              <input
+                name="title"
+                required
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Category
+              </span>
+              <select
+                name="categoryId"
+                required
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                SKU (optional override)
+              </span>
+              <input
+                name="sku"
+                placeholder="Leave blank to auto-generate from category"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Description
+              </span>
+              <textarea
+                name="description"
+                required
+                rows={2}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
             <AdminImageUploadField
               name="imageUrl"
               defaultValue="/assets/img/product-tee.svg"
@@ -1336,18 +1879,89 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               recommendedSize="1200 x 1200 px"
               helperText="Drag and drop a product image, or click Choose Image to upload."
             />
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span><input name="priceCents" required type="number" min={0.01} step={0.01} defaultValue="25.00" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Stock</span><input name="stockOnHand" required type="number" defaultValue={25} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Percent Off</span><input name="salePercentOff" type="number" min={0} max={90} defaultValue={0} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-            <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Label</span><input name="saleLabel" required defaultValue="Sale" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-            <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Cart Button Text</span><input name="cartCtaText" required defaultValue="Add to Cart" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Price (USD)
+              </span>
+              <input
+                name="priceCents"
+                required
+                type="number"
+                min={0.01}
+                step={0.01}
+                defaultValue="25.00"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Stock
+              </span>
+              <input
+                name="stockOnHand"
+                required
+                type="number"
+                defaultValue={25}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Sale Percent Off
+              </span>
+              <input
+                name="salePercentOff"
+                type="number"
+                min={0}
+                max={90}
+                defaultValue={0}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Sale Label
+              </span>
+              <input
+                name="saleLabel"
+                required
+                defaultValue="Sale"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Cart Button Text
+              </span>
+              <input
+                name="cartCtaText"
+                required
+                defaultValue="Add to Cart"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
             <div className="flex flex-wrap gap-4 md:col-span-2">
-              <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" /> Featured</label>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isHot" /> Hot Item</label>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="saleEnabled" /> Sale On</label>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="active" defaultChecked /> Active</label>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" name="isFeatured" /> Featured
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" name="isHot" /> Hot Item
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" name="saleEnabled" /> Sale On
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" name="active" defaultChecked /> Active
+              </label>
             </div>
-            <div className="md:col-span-2"><button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Add Product</button></div>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+              >
+                Add Product
+              </button>
+            </div>
           </form>
         </details>
 
@@ -1361,9 +1975,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             >
               <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-forest">{group.label}</p>
+                  <p className="text-sm font-semibold text-forest">
+                    {group.label}
+                  </p>
                   <p className="text-xs text-foreground/70">
-                    {group.items.length} item{group.items.length === 1 ? "" : "s"}
+                    {group.items.length} item
+                    {group.items.length === 1 ? "" : "s"}
                   </p>
                 </div>
                 <span
@@ -1381,7 +1998,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               ) : (
                 <div className="mt-3 space-y-2">
                   {group.items.map((product) => {
-                    const productVariantsForProduct = variantsByProductId.get(product.id) ?? [];
+                    const productVariantsForProduct =
+                      variantsByProductId.get(product.id) ?? [];
 
                     return (
                       <details
@@ -1392,17 +2010,30 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                       >
                         <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold text-forest">{product.title}</p>
+                            <p className="text-sm font-semibold text-forest">
+                              {product.title}
+                            </p>
                             <p className="text-xs text-foreground/70">
-                              {formatUsd(product.price_cents)} | Stock {product.stock_on_hand}
+                              {formatUsd(product.price_cents)} | Stock{" "}
+                              {product.stock_on_hand}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-1 text-[11px] font-semibold">
-                            <span className={`rounded-full px-2 py-0.5 ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                            <span
+                              className={`rounded-full px-2 py-0.5 ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}
+                            >
                               {product.active ? "Active" : "Hidden"}
                             </span>
-                            {product.is_featured ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Featured</span> : null}
-                            {product.is_hot ? <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700">Hot</span> : null}
+                            {product.is_featured ? (
+                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                                Featured
+                              </span>
+                            ) : null}
+                            {product.is_hot ? (
+                              <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700">
+                                Hot
+                              </span>
+                            ) : null}
                             <span
                               aria-hidden="true"
                               className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
@@ -1421,14 +2052,77 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                           />
                         </div>
 
-                        <form action={updateProductCard} className="mt-3 grid gap-3 md:grid-cols-2">
-                          <input type="hidden" name="productId" value={product.id} />
-                          <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Title</span><input name="title" defaultValue={product.title} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Category</span><select name="categoryId" defaultValue={product.category_id} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm">{categories.map((category) => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></label>
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">SKU</span><input name="sku" defaultValue={product.sku} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Slug</span><input name="slug" defaultValue={product.slug} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                          <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Description</span><textarea name="description" rows={2} defaultValue={product.description} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                        <form
+                          action={updateProductCard}
+                          className="mt-3 grid gap-3 md:grid-cols-2"
+                        >
+                          <input
+                            type="hidden"
+                            name="productId"
+                            value={product.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="redirectTo"
+                            value={`/admin#product-${product.id}`}
+                          />
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Title
+                            </span>
+                            <input
+                              name="title"
+                              defaultValue={product.title}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Category
+                            </span>
+                            <select
+                              name="categoryId"
+                              defaultValue={product.category_id}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            >
+                              {categories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              SKU
+                            </span>
+                            <input
+                              name="sku"
+                              defaultValue={product.sku}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Slug
+                            </span>
+                            <input
+                              name="slug"
+                              defaultValue={product.slug}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="space-y-1 md:col-span-2">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Description
+                            </span>
+                            <textarea
+                              name="description"
+                              rows={2}
+                              defaultValue={product.description}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
                           <AdminImageUploadField
                             name="imageUrl"
                             defaultValue={product.image_url ?? ""}
@@ -1436,23 +2130,114 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                             recommendedSize="1200 x 1200 px"
                             helperText="Drop a replacement image here or upload one, then save this card."
                           />
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Price (USD)</span><input name="priceCents" type="number" min={0.01} step={0.01} defaultValue={formatUsdInput(product.price_cents)} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Stock</span><input name="stockOnHand" type="number" defaultValue={product.stock_on_hand} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Price (USD)
+                            </span>
+                            <input
+                              name="priceCents"
+                              type="number"
+                              min={0.01}
+                              step={0.01}
+                              defaultValue={formatUsdInput(product.price_cents)}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Stock
+                            </span>
+                            <input
+                              name="stockOnHand"
+                              type="number"
+                              defaultValue={product.stock_on_hand}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
                           <p className="md:col-span-2 text-[11px] text-foreground/70">
-                            Note: Variant price overrides can override base product price on storefront.
+                            Note: Variant price overrides can override base
+                            product price on storefront.
                           </p>
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Percent Off</span><input name="salePercentOff" type="number" min={0} max={90} defaultValue={product.sale_percent_off} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Sale Label</span><input name="saleLabel" defaultValue={product.sale_label} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
-                          <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">Cart Button Text</span><input name="cartCtaText" defaultValue={product.cart_cta_text} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" /></label>
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Sale Percent Off
+                            </span>
+                            <input
+                              name="salePercentOff"
+                              type="number"
+                              min={0}
+                              max={90}
+                              defaultValue={product.sale_percent_off}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Sale Label
+                            </span>
+                            <input
+                              name="saleLabel"
+                              defaultValue={product.sale_label}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="space-y-1 md:col-span-2">
+                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Cart Button Text
+                            </span>
+                            <input
+                              name="cartCtaText"
+                              defaultValue={product.cart_cta_text}
+                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                            />
+                          </label>
                           <div className="flex flex-wrap gap-4 md:col-span-2">
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" defaultChecked={product.is_featured} /> Featured</label>
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isHot" defaultChecked={product.is_hot} /> Hot Item</label>
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="saleEnabled" defaultChecked={product.sale_enabled} /> Sale On</label>
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="active" defaultChecked={product.active} /> Active</label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                name="isFeatured"
+                                defaultChecked={product.is_featured}
+                              />{" "}
+                              Featured
+                            </label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                name="isHot"
+                                defaultChecked={product.is_hot}
+                              />{" "}
+                              Hot Item
+                            </label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                name="saleEnabled"
+                                defaultChecked={product.sale_enabled}
+                              />{" "}
+                              Sale On
+                            </label>
+                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                name="active"
+                                defaultChecked={product.active}
+                              />{" "}
+                              Active
+                            </label>
                           </div>
                           <div className="md:col-span-2 flex items-center justify-between">
-                            <p className="text-xs text-foreground/70">Price preview: <span className="font-semibold text-forest">{formatUsd(product.price_cents)}</span></p>
-                            <button type="submit" className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">Save Product</button>
+                            <p className="text-xs text-foreground/70">
+                              Price preview:{" "}
+                              <span className="font-semibold text-forest">
+                                {formatUsd(product.price_cents)}
+                              </span>
+                            </p>
+                            <button
+                              type="submit"
+                              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+                            >
+                              Save Product
+                            </button>
                           </div>
                         </form>
 
@@ -1461,38 +2246,92 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                             Variant Inventory (Size/Color)
                           </p>
                           <p className="mt-1 text-xs text-foreground/75">
-                            Add and maintain stock by size/color here. If variants exist, checkout uses variant stock.
+                            Add and maintain stock by size/color here. If
+                            variants exist, checkout uses variant stock.
                           </p>
 
-                          <form action={createProductVariant} className="mt-3 grid gap-2 md:grid-cols-3">
-                            <input type="hidden" name="productId" value={product.id} />
-                            <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
+                          <form
+                            action={createProductVariant}
+                            className="mt-3 grid gap-2 md:grid-cols-3"
+                          >
+                            <input
+                              type="hidden"
+                              name="productId"
+                              value={product.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="redirectTo"
+                              value={`/admin#product-${product.id}`}
+                            />
                             <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Size</span>
-                              <input name="sizeValue" placeholder="S, M, L" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                Size
+                              </span>
+                              <input
+                                name="sizeValue"
+                                placeholder="S, M, L"
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
                             </label>
                             <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Color</span>
-                              <input name="colorValue" placeholder="Black, Red" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                Color
+                              </span>
+                              <input
+                                name="colorValue"
+                                placeholder="Black, Red"
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
                             </label>
                             <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Variant SKU</span>
-                              <input name="sku" placeholder="WR-TSHIRT-BLK-M" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                Variant SKU
+                              </span>
+                              <input
+                                name="sku"
+                                placeholder="WR-TSHIRT-BLK-M"
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
                             </label>
                             <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (USD)</span>
-                              <input name="priceOverrideCents" type="number" min={0.01} step={0.01} placeholder="Optional (e.g. 22.00)" className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                Price Override (USD)
+                              </span>
+                              <input
+                                name="priceOverrideCents"
+                                type="number"
+                                min={0.01}
+                                step={0.01}
+                                placeholder="Optional (e.g. 22.00)"
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
                             </label>
                             <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Stock</span>
-                              <input name="stockOnHand" type="number" min={0} defaultValue={0} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                Stock
+                              </span>
+                              <input
+                                name="stockOnHand"
+                                type="number"
+                                min={0}
+                                defaultValue={0}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
                             </label>
                             <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
-                              <input type="checkbox" name="active" defaultChecked />
+                              <input
+                                type="checkbox"
+                                name="active"
+                                defaultChecked
+                              />
                               Active
                             </label>
                             <div className="md:col-span-3">
-                              <button type="submit" className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white">
+                              <button
+                                type="submit"
+                                className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
+                              >
                                 Add Variant
                               </button>
                             </div>
@@ -1505,47 +2344,124 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                           ) : (
                             <div className="mt-3 space-y-2">
                               {productVariantsForProduct.map((variant) => (
-                                <article key={variant.id} className="rounded-xl border border-rose/15 bg-white p-3">
+                                <article
+                                  key={variant.id}
+                                  className="rounded-xl border border-rose/15 bg-white p-3"
+                                >
                                   <p className="text-xs font-semibold text-forest">
                                     {formatVariantLabel(variant)}
                                   </p>
-                                  <form action={updateProductVariant} className="mt-2 grid gap-2 md:grid-cols-3">
-                                    <input type="hidden" name="variantId" value={variant.id} />
-                                    <input type="hidden" name="productId" value={product.id} />
-                                    <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
+                                  <form
+                                    action={updateProductVariant}
+                                    className="mt-2 grid gap-2 md:grid-cols-3"
+                                  >
+                                    <input
+                                      type="hidden"
+                                      name="variantId"
+                                      value={variant.id}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="productId"
+                                      value={product.id}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="redirectTo"
+                                      value={`/admin#product-${product.id}`}
+                                    />
                                     <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Size</span>
-                                      <input name="sizeValue" defaultValue={variant.size_value ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                        Size
+                                      </span>
+                                      <input
+                                        name="sizeValue"
+                                        defaultValue={variant.size_value ?? ""}
+                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                      />
                                     </label>
                                     <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Color</span>
-                                      <input name="colorValue" defaultValue={variant.color_value ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                        Color
+                                      </span>
+                                      <input
+                                        name="colorValue"
+                                        defaultValue={variant.color_value ?? ""}
+                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                      />
                                     </label>
                                     <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Variant SKU</span>
-                                      <input name="sku" defaultValue={variant.sku ?? ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                        Variant SKU
+                                      </span>
+                                      <input
+                                        name="sku"
+                                        defaultValue={variant.sku ?? ""}
+                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                      />
                                     </label>
                                     <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Price Override (USD)</span>
-                                      <input name="priceOverrideCents" type="number" min={0.01} step={0.01} defaultValue={variant.price_override_cents != null ? formatUsdInput(variant.price_override_cents) : ""} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                        Price Override (USD)
+                                      </span>
+                                      <input
+                                        name="priceOverrideCents"
+                                        type="number"
+                                        min={0.01}
+                                        step={0.01}
+                                        defaultValue={
+                                          variant.price_override_cents != null
+                                            ? formatUsdInput(
+                                                variant.price_override_cents,
+                                              )
+                                            : ""
+                                        }
+                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                      />
                                     </label>
                                     <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">Stock</span>
-                                      <input name="stockOnHand" type="number" min={0} defaultValue={variant.stock_on_hand} className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm" />
+                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                        Stock
+                                      </span>
+                                      <input
+                                        name="stockOnHand"
+                                        type="number"
+                                        min={0}
+                                        defaultValue={variant.stock_on_hand}
+                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                      />
                                     </label>
                                     <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
-                                      <input type="checkbox" name="active" defaultChecked={variant.active} />
+                                      <input
+                                        type="checkbox"
+                                        name="active"
+                                        defaultChecked={variant.active}
+                                      />
                                       Active
                                     </label>
                                     <div className="md:col-span-3">
-                                      <button type="submit" className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white">
+                                      <button
+                                        type="submit"
+                                        className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
+                                      >
                                         Save Variant
                                       </button>
                                     </div>
                                   </form>
-                                  <form action={deleteProductVariant} className="mt-2">
-                                    <input type="hidden" name="variantId" value={variant.id} />
-                                    <input type="hidden" name="redirectTo" value={`/admin#product-${product.id}`} />
+                                  <form
+                                    action={deleteProductVariant}
+                                    className="mt-2"
+                                  >
+                                    <input
+                                      type="hidden"
+                                      name="variantId"
+                                      value={variant.id}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="redirectTo"
+                                      value={`/admin#product-${product.id}`}
+                                    />
                                     <AdminConfirmSubmitButton
                                       buttonLabel="Delete Variant"
                                       confirmMessage="Are you sure you'd like to delete this variant?"
@@ -1558,9 +2474,20 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                           )}
                         </div>
 
-                        <form action={deleteProductCard} className="mt-2 flex justify-end">
-                          <input type="hidden" name="productId" value={product.id} />
-                          <input type="hidden" name="redirectTo" value={`/admin#inventory-group-${group.id}`} />
+                        <form
+                          action={deleteProductCard}
+                          className="mt-2 flex justify-end"
+                        >
+                          <input
+                            type="hidden"
+                            name="productId"
+                            value={product.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="redirectTo"
+                            value={`/admin#inventory-group-${group.id}`}
+                          />
                           <AdminConfirmSubmitButton
                             buttonLabel="Delete Product"
                             confirmMessage="Are you sure you'd like to delete this item?"
@@ -1583,7 +2510,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <p className="text-xs text-foreground/70">{messages.length} total</p>
         </div>
         {messages.length === 0 ? (
-          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">No messages yet.</p>
+          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
+            No messages yet.
+          </p>
         ) : null}
         <div className="space-y-2">
           {messages.map((message) => (
@@ -1595,13 +2524,18 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             >
               <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-forest">{message.subject}</p>
+                  <p className="text-sm font-semibold text-forest">
+                    {message.subject}
+                  </p>
                   <p className="text-xs text-foreground/70">
-                    {message.name} ({message.email}) • {formatDateTime(message.created_at)}
+                    {message.name} ({message.email}) •{" "}
+                    {formatDateTime(message.created_at)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${messageStatusBadgeClass(message.status)}`}>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${messageStatusBadgeClass(message.status)}`}
+                  >
                     {message.status}
                   </span>
                   <span
@@ -1614,11 +2548,20 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </summary>
 
               <div className="mt-3 space-y-2 text-sm">
-                <p className="rounded-xl bg-surface p-3 text-foreground/85">{message.message}</p>
+                <p className="rounded-xl bg-surface p-3 text-foreground/85">
+                  {message.message}
+                </p>
               </div>
-              <form action={updateContactMessage} className="mt-3 grid gap-2 md:grid-cols-[220px_1fr_auto]">
+              <form
+                action={updateContactMessage}
+                className="mt-3 grid gap-2 md:grid-cols-[220px_1fr_auto]"
+              >
                 <input type="hidden" name="messageId" value={message.id} />
-                <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#message-${message.id}`} />
+                <input
+                  type="hidden"
+                  name="redirectTo"
+                  value={`${orderViewBasePath}#message-${message.id}`}
+                />
                 <select
                   name="status"
                   title="Message status"
@@ -1627,7 +2570,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
                 >
                   {CONTACT_STATUS_VALUES.map((status) => (
-                    <option key={status} value={status}>{status}</option>
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
                   ))}
                 </select>
                 <input
@@ -1636,7 +2581,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   placeholder="Internal notes"
                   className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
                 />
-                <button type="submit" className="rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-white">Save</button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-white"
+                >
+                  Save
+                </button>
               </form>
             </details>
           ))}
@@ -1698,7 +2648,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         </div>
         <div className="grid gap-2 md:grid-cols-2">
           <form action={archiveResolvedOrders} className="w-full">
-            <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
+            <input
+              type="hidden"
+              name="redirectTo"
+              value={`${orderViewBasePath}#orders-uploads`}
+            />
             <AdminConfirmSubmitButton
               buttonLabel="Archive Fulfilled/Completed/Cancelled"
               confirmMessage="Archive all fulfilled, completed, and cancelled orders from the active list?"
@@ -1706,7 +2660,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             />
           </form>
           <form action={clearArchivedOrders} className="w-full">
-            <input type="hidden" name="redirectTo" value={`${orderViewBasePath}#orders-uploads`} />
+            <input
+              type="hidden"
+              name="redirectTo"
+              value={`${orderViewBasePath}#orders-uploads`}
+            />
             <AdminConfirmSubmitButton
               buttonLabel="Clear Archived Orders"
               confirmMessage="Permanently delete archived fulfilled/completed/cancelled orders? This cannot be undone."
@@ -1723,9 +2681,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           {orders.map((order) => {
             const parsedNotes = parseFulfillmentNotes(order.notes);
             const orderNumber = formatOrderNumber(order.id, order.created_at);
-            const canPrintLabel = ["paid", "in_production", "fulfilled", "completed"].includes(
-              order.status,
-            );
+            const canPrintLabel = [
+              "paid",
+              "in_production",
+              "fulfilled",
+              "completed",
+            ].includes(order.status);
 
             return (
               <details
@@ -1740,12 +2701,17 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                       {order.customer_name} • {formatUsd(order.amount_cents)}
                     </p>
                     <p className="text-xs text-foreground/70">
-                      {order.customer_email} • {formatDateTime(order.created_at)}
+                      {order.customer_email} •{" "}
+                      {formatDateTime(order.created_at)}
                     </p>
-                    <p className="text-[11px] font-semibold text-gold">Order #{orderNumber}</p>
+                    <p className="text-[11px] font-semibold text-gold">
+                      Order #{orderNumber}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}
+                    >
                       {formatOrderStatusLabel(order.status)}
                     </span>
                     {order.archived_at ? (
@@ -1764,25 +2730,51 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
                 <div className="mt-3 grid gap-4 xl:grid-cols-[1fr_auto] xl:items-start">
                   <div className="space-y-2 text-sm">
-                    <p><span className="font-semibold">Order #:</span> {orderNumber}</p>
-                    <p><span className="font-semibold">Phone:</span> {order.customer_phone ?? "N/A"}</p>
-                    <p><span className="font-semibold">Option:</span> {order.product_option}</p>
-                    <p><span className="font-semibold">Qty:</span> {order.quantity}</p>
-                    <p><span className="font-semibold">File:</span> {order.design_path}</p>
-                    <p><span className="font-semibold">Placed:</span> {formatDateTime(order.created_at)}</p>
-                    <p><span className="font-semibold">Paid:</span> {formatDateTime(order.paid_at)}</p>
+                    <p>
+                      <span className="font-semibold">Order #:</span>{" "}
+                      {orderNumber}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Phone:</span>{" "}
+                      {order.customer_phone ?? "N/A"}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Option:</span>{" "}
+                      {order.product_option}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Qty:</span>{" "}
+                      {order.quantity}
+                    </p>
+                    <p>
+                      <span className="font-semibold">File:</span>{" "}
+                      {order.design_path}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Placed:</span>{" "}
+                      {formatDateTime(order.created_at)}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Paid:</span>{" "}
+                      {formatDateTime(order.paid_at)}
+                    </p>
                     {parsedNotes.fulfillmentMethod ? (
                       <p>
-                        <span className="font-semibold">Fulfillment:</span> {parsedNotes.fulfillmentMethod}
+                        <span className="font-semibold">Fulfillment:</span>{" "}
+                        {parsedNotes.fulfillmentMethod}
                       </p>
                     ) : null}
                     {order.archived_at ? (
                       <p>
-                        <span className="font-semibold">Archived:</span> {formatDateTime(order.archived_at)}
+                        <span className="font-semibold">Archived:</span>{" "}
+                        {formatDateTime(order.archived_at)}
                       </p>
                     ) : null}
                     {parsedNotes.bodyNotes ? (
-                      <p><span className="font-semibold">Notes:</span> {parsedNotes.bodyNotes}</p>
+                      <p>
+                        <span className="font-semibold">Notes:</span>{" "}
+                        {parsedNotes.bodyNotes}
+                      </p>
                     ) : null}
                     {parsedNotes.entries.length > 0 ? (
                       <div className="rounded-xl border border-violet-200 bg-violet-50 p-2">
@@ -1792,7 +2784,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                         <div className="mt-1 space-y-1 text-xs text-violet-900">
                           {parsedNotes.entries.map((entry, index) => (
                             <p key={`${order.id}-fulfillment-${index}`}>
-                              [{entry.timestamp ? formatDateTime(entry.timestamp) : "No time"}] {entry.text}
+                              [
+                              {entry.timestamp
+                                ? formatDateTime(entry.timestamp)
+                                : "No time"}
+                              ] {entry.text}
                             </p>
                           ))}
                         </div>
@@ -1801,8 +2797,19 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   </div>
                   <div className="space-y-3">
                     {order.fileLink ? (
-                      <a href={order.fileLink} target="_blank" rel="noreferrer" className="inline-flex w-full justify-center rounded-md border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white sm:w-auto">Download Upload</a>
-                    ) : (<p className="text-xs text-red-700">Upload link unavailable</p>)}
+                      <a
+                        href={order.fileLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex w-full justify-center rounded-md border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white sm:w-auto"
+                      >
+                        Download Upload
+                      </a>
+                    ) : (
+                      <p className="text-xs text-red-700">
+                        Upload link unavailable
+                      </p>
+                    )}
                     {canPrintLabel ? (
                       <PrintOrderLabelButton
                         orderNumber={orderNumber}
@@ -1811,11 +2818,24 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                         productOption={order.product_option}
                         quantity={order.quantity}
                         createdAt={order.created_at}
+                        businessAddress={siteContent.contact.address}
+                        businessEmail={siteContent.contact.email}
+                        businessPhone={siteContent.contact.phone}
+                        defaultThankYouNote={
+                          siteContent.contact.printLabelThankYouNote
+                        }
                       />
                     ) : null}
-                    <form action={updateOrderStatus} className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_auto] sm:items-center">
+                    <form
+                      action={updateOrderStatus}
+                      className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_auto] sm:items-center"
+                    >
                       <input type="hidden" name="orderId" value={order.id} />
-                      <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                      <input
+                        type="hidden"
+                        name="redirectTo"
+                        value={orderRedirectTo(order.id)}
+                      />
                       <select
                         name="status"
                         title="Order status"
@@ -1824,7 +2844,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                         className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
                       >
                         {ORDER_STATUS_VALUES.map((status) => (
-                          <option key={status} value={status}>{formatOrderStatusLabel(status)}</option>
+                          <option key={status} value={status}>
+                            {formatOrderStatusLabel(status)}
+                          </option>
                         ))}
                       </select>
                       <input
@@ -1832,12 +2854,21 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                         placeholder="Fulfillment note (drop-off + time)"
                         className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
                       />
-                      <button type="submit" className="w-full rounded-md bg-rose px-3 py-2 text-xs font-semibold text-white sm:w-auto">Save</button>
+                      <button
+                        type="submit"
+                        className="w-full rounded-md bg-rose px-3 py-2 text-xs font-semibold text-white sm:w-auto"
+                      >
+                        Save
+                      </button>
                     </form>
                     {order.archived_at ? (
                       <form action={unarchiveOrder} className="w-full sm:w-fit">
                         <input type="hidden" name="orderId" value={order.id} />
-                        <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                        <input
+                          type="hidden"
+                          name="redirectTo"
+                          value={orderRedirectTo(order.id)}
+                        />
                         <button
                           type="submit"
                           className="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface sm:w-auto"
@@ -1848,7 +2879,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                     ) : isArchivableOrderStatus(order.status) ? (
                       <form action={archiveOrder} className="w-full sm:w-fit">
                         <input type="hidden" name="orderId" value={order.id} />
-                        <input type="hidden" name="redirectTo" value={orderRedirectTo(order.id)} />
+                        <input
+                          type="hidden"
+                          name="redirectTo"
+                          value={orderRedirectTo(order.id)}
+                        />
                         <AdminConfirmSubmitButton
                           buttonLabel="Archive Order"
                           confirmMessage="Archive this fulfilled/completed/cancelled order?"
