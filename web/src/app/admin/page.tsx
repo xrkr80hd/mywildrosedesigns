@@ -4,7 +4,7 @@ import { AdminImageUploadField } from "@/components/admin-image-upload-field";
 import { AdminPopupProductSelector } from "@/components/admin-popup-product-selector";
 import { PrintOrderLabelButton } from "@/components/print-order-label-button";
 import { ShareProductButton } from "@/components/share-product-button";
-import { getUploadBucket } from "@/lib/env";
+import { getUploadBucket, hasSupabaseServerEnv } from "@/lib/env";
 import { parseFulfillmentNotes } from "@/lib/fulfillment-notes";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import type { ProductOptionAdminRow } from "@/lib/product-options-store";
@@ -217,7 +217,7 @@ const ADMIN_NAV_GROUPS = [
     links: [
       { href: "/admin/content", label: "Edit About/Contact Content" },
       { href: "/admin#product-inventory", label: "Manage Inventory" },
-      { href: "/admin/how-to", label: "How To Edit Pages" },
+      { href: "/admin/help", label: "Open the Dang Admin Tutorial" },
     ],
   },
   {
@@ -225,6 +225,88 @@ const ADMIN_NAV_GROUPS = [
     links: [{ href: "/logout", label: "Admin Sign Out" }],
   },
 ] as const;
+
+function AdminLocalPreviewMode() {
+  return (
+    <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-6 py-10">
+      <header className="rounded-3xl border border-rose/20 bg-surface p-7 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">
+          Wild Rose Admin
+        </p>
+        <h1 className="mt-2 text-4xl text-forest">Local Preview Mode</h1>
+        <p className="mt-2 max-w-3xl text-sm text-foreground/75">
+          Docker is running with local admin credentials, but Supabase server
+          envs are empty. The floating help system and local content editor are
+          live for review, and the remaining data-backed admin tools will wake
+          up once real Supabase values are added.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Link
+            href="/admin/help"
+            className="rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+          >
+            Open the Dang Admin Tutorial
+          </Link>
+          <Link
+            href="/admin/content"
+            className="rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+          >
+            Open Content Editor
+          </Link>
+          <Link
+            href="/"
+            className="rounded-xl border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+          >
+            Open Storefront Home
+          </Link>
+        </div>
+      </header>
+
+      <section className="mt-6 grid gap-4 md:grid-cols-3">
+        <article className="rounded-2xl border border-rose/20 bg-white/90 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+            What you can review now
+          </p>
+          <ul className="mt-3 space-y-2 text-sm text-foreground/80">
+            <li>The desktop floating help launcher and movable panel.</li>
+            <li>The mobile-style full help page at `/admin/help`.</li>
+            <li>
+              The local About + Contact content editor at `/admin/content`.
+            </li>
+          </ul>
+        </article>
+
+        <article className="rounded-2xl border border-rose/20 bg-white/90 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+            What is paused
+          </p>
+          <ul className="mt-3 space-y-2 text-sm text-foreground/80">
+            <li>Live inventory, messages, uploads, and orders.</li>
+            <li>Any admin tool that needs real Supabase reads and writes.</li>
+            <li>Any admin save action outside the local content fallback.</li>
+          </ul>
+        </article>
+
+        <article className="rounded-2xl border border-rose/20 bg-white/90 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+            Next local step
+          </p>
+          <ul className="mt-3 space-y-2 text-sm text-foreground/80">
+            <li>Keep this Docker preview for UI review right now.</li>
+            <li>
+              Turn the live data connection back on when you want real admin
+              data.
+            </li>
+            <li>
+              Leave the local-only `.env` out of git until you explicitly say to
+              stage it.
+            </li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  );
+}
 
 function formatUsd(amountCents: number) {
   return new Intl.NumberFormat("en-US", {
@@ -764,6 +846,10 @@ function AdminDropdownSection({
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
+  if (!hasSupabaseServerEnv()) {
+    return <AdminLocalPreviewMode />;
+  }
+
   const resolvedSearchParams = await searchParams;
   const viewParam = resolvedSearchParams?.orderView;
   const rawOrderView = Array.isArray(viewParam) ? viewParam[0] : viewParam;
@@ -870,6 +956,22 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           Manage homepage copy, categories, products, welcome cards, customer
           messages, uploads, and orders from one dashboard.
         </p>
+
+        <Link
+          href="/admin/help"
+          className="mt-5 block rounded-2xl border border-rose/30 bg-rose/10 px-4 py-4 text-left transition hover:border-rose/50 hover:bg-rose/15"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gold">
+            Admin Tutorial
+          </p>
+          <p className="mt-1 text-lg font-semibold text-forest">
+            Johannah!! look at the dang tutorial!!!!
+          </p>
+          <p className="mt-1 text-sm text-foreground/75">
+            Click this box to open the Dang Admin Tutorial before digging
+            through the dashboard blind.
+          </p>
+        </Link>
 
         <details className="mt-5 rounded-2xl border border-rose/20 bg-white/70 p-3 md:hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">

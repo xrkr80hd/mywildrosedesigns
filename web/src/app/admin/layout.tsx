@@ -1,6 +1,7 @@
-import { Suspense } from "react";
 import { AdminActionToast } from "@/components/admin-action-toast";
+import { AdminHelpShell } from "@/components/admin-help-shell";
 import { AdminUiState } from "@/components/admin-ui-state";
+import { Suspense } from "react";
 
 export default function AdminLayout({
   children,
@@ -13,6 +14,7 @@ export default function AdminLayout({
         <AdminActionToast />
       </Suspense>
       <AdminUiState />
+      <AdminHelpShell />
       <div className="admin-shell-banner">
         <strong>Admin Editing Mode</strong>
         <span>Changes made here update storefront content.</span>

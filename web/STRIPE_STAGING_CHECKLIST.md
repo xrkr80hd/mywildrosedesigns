@@ -10,10 +10,6 @@ Set these in Vercel for your production environment:
 - `STRIPE_WEBHOOK_SECRET` (from Stripe webhook endpoint signing secret)
 - `NEXT_PUBLIC_SITE_URL` (your public site URL, e.g. `https://yourdomain.com`)
 
-Optional but recommended:
-
-- `SUPABASE_UPLOAD_BUCKET` (defaults to `design-uploads` if omitted)
-
 ## 2) Create Stripe webhook endpoint
 
 In Stripe dashboard:

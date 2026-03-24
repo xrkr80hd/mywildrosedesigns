@@ -1,11 +1,19 @@
 import "server-only";
 
+import { hasSupabaseServerEnv } from "@/lib/env";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { unstable_noStore as noStore } from "next/cache";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 const SITE_SETTING_PREFIX = "site-setting::";
 const SITE_SETTING_SORT_ORDER = 9000;
 const OPTIONAL_EMPTY_VALUE_KEYS = new Set<SiteContentKey>(["contact_phone"]);
+const LOCAL_SITE_CONTENT_FILE = path.join(
+  process.cwd(),
+  ".local",
+  "site-content.json",
+);
 
 export type AboutPageContent = {
   badge: string;
@@ -84,6 +92,8 @@ type WelcomeSettingRow = {
   title: string;
   body: string;
 };
+
+type LocalSiteContentStore = Partial<Record<SiteContentKey, string>>;
 
 const DEFAULT_VALUES_BY_KEY: Record<SiteContentKey, string> = {
   about_badge: "About Wild Rose",
@@ -192,6 +202,94 @@ function readValue(
   return DEFAULT_VALUES_BY_KEY[key];
 }
 
+function buildSiteContentSettings(
+  valuesByKey: Map<SiteContentKey, string>,
+): SiteContentSettings {
+  return {
+    about: {
+      badge: readValue(valuesByKey, "about_badge"),
+      title: readValue(valuesByKey, "about_title"),
+      intro: readValue(valuesByKey, "about_intro"),
+      serviceOneTitle: readValue(valuesByKey, "about_service_1_title"),
+      serviceOneDetail: readValue(valuesByKey, "about_service_1_detail"),
+      serviceTwoTitle: readValue(valuesByKey, "about_service_2_title"),
+      serviceTwoDetail: readValue(valuesByKey, "about_service_2_detail"),
+      serviceThreeTitle: readValue(valuesByKey, "about_service_3_title"),
+      serviceThreeDetail: readValue(valuesByKey, "about_service_3_detail"),
+      serviceFourTitle: readValue(valuesByKey, "about_service_4_title"),
+      serviceFourDetail: readValue(valuesByKey, "about_service_4_detail"),
+      ctaTitle: readValue(valuesByKey, "about_cta_title"),
+      ctaDescription: readValue(valuesByKey, "about_cta_description"),
+      primaryCtaLabel: readValue(valuesByKey, "about_primary_cta_label"),
+      primaryCtaHref: readValue(valuesByKey, "about_primary_cta_href"),
+      secondaryCtaLabel: readValue(valuesByKey, "about_secondary_cta_label"),
+      secondaryCtaHref: readValue(valuesByKey, "about_secondary_cta_href"),
+    },
+    contact: {
+      badge: readValue(valuesByKey, "contact_badge"),
+      title: readValue(valuesByKey, "contact_title"),
+      intro: readValue(valuesByKey, "contact_intro"),
+      email: readValue(valuesByKey, "contact_email"),
+      phone: readValue(valuesByKey, "contact_phone"),
+      address: readValue(valuesByKey, "contact_address"),
+      printLabelThankYouNote: readValue(
+        valuesByKey,
+        "contact_print_label_thank_you_note",
+      ),
+      hoursTitle: readValue(valuesByKey, "contact_hours_title"),
+      hoursWeekday: readValue(valuesByKey, "contact_hours_weekday"),
+      hoursSaturday: readValue(valuesByKey, "contact_hours_saturday"),
+      hoursSunday: readValue(valuesByKey, "contact_hours_sunday"),
+    },
+  };
+}
+
+async function readLocalSiteContentMap(): Promise<Map<SiteContentKey, string>> {
+  try {
+    const raw = await readFile(LOCAL_SITE_CONTENT_FILE, "utf8");
+    const parsed = JSON.parse(raw) as LocalSiteContentStore;
+    const valuesByKey = new Map<SiteContentKey, string>();
+
+    for (const key of SITE_CONTENT_KEYS) {
+      const value = parsed[key];
+      if (typeof value === "string") {
+        valuesByKey.set(key, value);
+      }
+    }
+
+    return valuesByKey;
+  } catch {
+    return new Map<SiteContentKey, string>();
+  }
+}
+
+async function writeLocalSiteContentMap(
+  valuesByKey: Map<SiteContentKey, string>,
+): Promise<void> {
+  await mkdir(path.dirname(LOCAL_SITE_CONTENT_FILE), { recursive: true });
+
+  const nextStore = Object.fromEntries(
+    SITE_CONTENT_KEYS.flatMap((key) => {
+      const value = valuesByKey.get(key);
+      return value === undefined ? [] : [[key, value]];
+    }),
+  );
+
+  await writeFile(
+    LOCAL_SITE_CONTENT_FILE,
+    `${JSON.stringify(nextStore, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+function getStoredValueForWrite(key: SiteContentKey, value: string): string {
+  if (value || OPTIONAL_EMPTY_VALUE_KEYS.has(key)) {
+    return value;
+  }
+
+  return DEFAULT_VALUES_BY_KEY[key];
+}
+
 export function isSiteSettingTitle(title: string): boolean {
   return title.startsWith(SITE_SETTING_PREFIX);
 }
@@ -201,6 +299,11 @@ export async function getSiteContentSettings(): Promise<SiteContentSettings> {
     noStore();
   } catch {
     // noStore is only available in request contexts; scripts can safely skip it.
+  }
+
+  if (!hasSupabaseServerEnv()) {
+    const valuesByKey = await readLocalSiteContentMap();
+    return buildSiteContentSettings(valuesByKey);
   }
 
   try {
@@ -228,43 +331,7 @@ export async function getSiteContentSettings(): Promise<SiteContentSettings> {
       valuesByKey.set(key, String(row.body ?? "").trim());
     }
 
-    return {
-      about: {
-        badge: readValue(valuesByKey, "about_badge"),
-        title: readValue(valuesByKey, "about_title"),
-        intro: readValue(valuesByKey, "about_intro"),
-        serviceOneTitle: readValue(valuesByKey, "about_service_1_title"),
-        serviceOneDetail: readValue(valuesByKey, "about_service_1_detail"),
-        serviceTwoTitle: readValue(valuesByKey, "about_service_2_title"),
-        serviceTwoDetail: readValue(valuesByKey, "about_service_2_detail"),
-        serviceThreeTitle: readValue(valuesByKey, "about_service_3_title"),
-        serviceThreeDetail: readValue(valuesByKey, "about_service_3_detail"),
-        serviceFourTitle: readValue(valuesByKey, "about_service_4_title"),
-        serviceFourDetail: readValue(valuesByKey, "about_service_4_detail"),
-        ctaTitle: readValue(valuesByKey, "about_cta_title"),
-        ctaDescription: readValue(valuesByKey, "about_cta_description"),
-        primaryCtaLabel: readValue(valuesByKey, "about_primary_cta_label"),
-        primaryCtaHref: readValue(valuesByKey, "about_primary_cta_href"),
-        secondaryCtaLabel: readValue(valuesByKey, "about_secondary_cta_label"),
-        secondaryCtaHref: readValue(valuesByKey, "about_secondary_cta_href"),
-      },
-      contact: {
-        badge: readValue(valuesByKey, "contact_badge"),
-        title: readValue(valuesByKey, "contact_title"),
-        intro: readValue(valuesByKey, "contact_intro"),
-        email: readValue(valuesByKey, "contact_email"),
-        phone: readValue(valuesByKey, "contact_phone"),
-        address: readValue(valuesByKey, "contact_address"),
-        printLabelThankYouNote: readValue(
-          valuesByKey,
-          "contact_print_label_thank_you_note",
-        ),
-        hoursTitle: readValue(valuesByKey, "contact_hours_title"),
-        hoursWeekday: readValue(valuesByKey, "contact_hours_weekday"),
-        hoursSaturday: readValue(valuesByKey, "contact_hours_saturday"),
-        hoursSunday: readValue(valuesByKey, "contact_hours_sunday"),
-      },
-    };
+    return buildSiteContentSettings(valuesByKey);
   } catch {
     return DEFAULT_SITE_CONTENT;
   }
@@ -281,6 +348,17 @@ export async function saveSiteContentValues(
     );
 
   if (entries.length === 0) {
+    return;
+  }
+
+  if (!hasSupabaseServerEnv()) {
+    const valuesByKey = await readLocalSiteContentMap();
+
+    for (const [key, value] of entries) {
+      valuesByKey.set(key, getStoredValueForWrite(key, value));
+    }
+
+    await writeLocalSiteContentMap(valuesByKey);
     return;
   }
 
@@ -309,7 +387,7 @@ export async function saveSiteContentValues(
     const title = toSettingTitle(key);
     const payload = {
       title,
-      body: value || DEFAULT_VALUES_BY_KEY[key],
+      body: getStoredValueForWrite(key, value),
       cta_label: null,
       cta_href: null,
       sort_order: SITE_SETTING_SORT_ORDER,

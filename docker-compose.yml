@@ -5,13 +5,6 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
-        SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-        SUPABASE_UPLOAD_BUCKET: ${SUPABASE_UPLOAD_BUCKET:-design-uploads}
-        STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-        STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-        ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-        ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
     image: wildrose-web:local
     ports:
       - "3000:3000"
@@ -24,4 +17,10 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_BYPASS_AUTH: ${ADMIN_BYPASS_AUTH:-false}
+    volumes:
+      - wildrose-local-content:/app/.local
     restart: unless-stopped
+
+volumes:
+  wildrose-local-content:

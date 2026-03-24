@@ -27,6 +27,7 @@ yarn-error.log*
 
 # Runtime/uploads/temp
 uploads/
+web/.local/
 web/supabase/.temp/
 web/supabase/.branches/
 web/supabase/snippets/

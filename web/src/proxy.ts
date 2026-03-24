@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getAdminCredentials } from "@/lib/env";
 import { ADMIN_SESSION_COOKIE, encodeAdminSession } from "@/lib/admin-session";
+import { getAdminCredentials, isAdminAuthBypassed } from "@/lib/env";
+import { NextRequest, NextResponse } from "next/server";
 
 function unauthorized(request: NextRequest) {
   const loginUrl = new URL("/admin/login", request.url);
@@ -9,6 +9,10 @@ function unauthorized(request: NextRequest) {
 }
 
 export function proxy(request: NextRequest) {
+  if (isAdminAuthBypassed()) {
+    return NextResponse.next();
+  }
+
   if (request.nextUrl.pathname.startsWith("/admin/login")) {
     return NextResponse.next();
   }

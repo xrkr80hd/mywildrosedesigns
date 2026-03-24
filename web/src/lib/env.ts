@@ -29,6 +29,13 @@ export function getSupabaseServerEnv() {
   };
 }
 
+export function hasSupabaseServerEnv(): boolean {
+  return (
+    hasEnvValue("NEXT_PUBLIC_SUPABASE_URL") &&
+    hasEnvValue("SUPABASE_SERVICE_ROLE_KEY")
+  );
+}
+
 export function getStripeServerEnv() {
   return {
     stripeSecretKey: readRequiredEnv("STRIPE_SECRET_KEY"),
@@ -49,4 +56,8 @@ export function getAdminCredentials() {
     username: process.env.ADMIN_USERNAME ?? "",
     password: process.env.ADMIN_PASSWORD ?? "",
   };
+}
+
+export function isAdminAuthBypassed(): boolean {
+  return (process.env.ADMIN_BYPASS_AUTH ?? "").trim().toLowerCase() === "true";
 }

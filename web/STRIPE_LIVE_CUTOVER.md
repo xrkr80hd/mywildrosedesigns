@@ -8,12 +8,6 @@ Set these in the `web` project:
 - `STRIPE_WEBHOOK_SECRET` = webhook signing secret for your live endpoint (`whsec_...`)
 - `NEXT_PUBLIC_SITE_URL` = your live domain (for example `https://wildrosedesigns.com`)
 
-Keep existing Supabase vars in place:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SUPABASE_UPLOAD_BUCKET` (optional, default is `design-uploads`)
-
 ## 2) Stripe Dashboard webhook (Live mode)
 
 Create endpoint:

@@ -1,6 +1,4 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+const nextConfig = {
   images: {
     remotePatterns: [
       {
@@ -23,7 +21,11 @@ const nextConfig: NextConfig = {
       { source: "/contact.php", destination: "/contact", permanent: true },
       { source: "/login.php", destination: "/login", permanent: true },
       { source: "/logout.php", destination: "/logout", permanent: true },
-      { source: "/admin/dashboard.php", destination: "/admin", permanent: true },
+      {
+        source: "/admin/dashboard.php",
+        destination: "/admin",
+        permanent: true,
+      },
       { source: "/admin/products.php", destination: "/admin", permanent: true },
       { source: "/get_products.php", destination: "/shop", permanent: true },
       { source: "/setup.php", destination: "/", permanent: true },

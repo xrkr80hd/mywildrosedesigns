@@ -1,3 +1,4 @@
+import { hasSupabaseServerEnv } from "@/lib/env";
 import { getSiteContentSettings } from "@/lib/site-content";
 import Link from "next/link";
 import { saveAboutPageContent, saveContactPageContent } from "../actions";
@@ -5,6 +6,7 @@ import { saveAboutPageContent, saveContactPageContent } from "../actions";
 export const dynamic = "force-dynamic";
 
 export default async function AdminContentPage() {
+  const isLocalContentMode = !hasSupabaseServerEnv();
   const content = await getSiteContentSettings();
 
   return (
@@ -20,6 +22,12 @@ export default async function AdminContentPage() {
           Edit public page text and contact details here. This is separate from
           products and inventory.
         </p>
+        {isLocalContentMode ? (
+          <div className="mt-4 rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Local content mode is active. Saves write to the Docker local
+            fallback store instead of the live content backend.
+          </div>
+        ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
           <Link
             href="/admin"
