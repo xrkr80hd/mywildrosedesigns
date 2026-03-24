@@ -36,3 +36,4 @@ web/supabase/snippets/
 .vercel/
 web/.vercel/
 .vercel
+.env*.local

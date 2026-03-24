@@ -10,7 +10,7 @@
     "react-dom": "19.2.3"
   },
   "scripts": {
-    "build": "npm --prefix web ci && npm --prefix web run build",
+    "build": "npm --prefix web ci --include=dev && npm --prefix web run build",
     "dev": "npm --prefix web run dev",
     "start": "npm --prefix web run start",
     "lint": "npm --prefix web run lint"
