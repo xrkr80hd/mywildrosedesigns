@@ -258,6 +258,28 @@ Verification:
 - Passed: `curl -sS -b /tmp/wrd-admin-cookies.txt http://localhost:3000/admin/help -o /tmp/wrd-admin-help-updated.html -w 'GET /admin/help -> %{http_code}\n' --max-time 30` returned `200`
 - Passed tutorial content checks for `Start Here`, `Products, Templates, and Variants`, `Bundle Maker`, `Login and Safety`, `Quick Fixes`, and `Content Management`.
 
+## ADHD-Friendly Tutorial Rewrite
+
+- [x] The admin tutorial was simplified into a shorter task guide for ADHD-friendly use.
+
+Completed behavior:
+
+- Reduced the tutorial to five plain-language sections: Start Here, Add or Edit Products, Sizes/Brands/Templates, Make a Bundle, and Orders/Content/Fixes.
+- Replaced manual-style wording with short action instructions and three-bullet sections.
+- Restyled tutorial sections into calmer step cards with less visual noise.
+- Kept mobile spacing compact so the tutorial does not dominate the phone screen.
+
+Files changed:
+
+- `web/src/lib/admin-help-content.ts`
+- `web/src/app/globals.css`
+
+Verification:
+
+- Passed: `cd web && npx eslint src/lib/admin-help-content.ts src/components/admin-help-content.tsx src/components/admin-help-shell.tsx src/app/admin/help/page.tsx`
+- Passed: `curl -sS -b /tmp/wrd-admin-cookies.txt http://localhost:3000/admin/help -o /tmp/wrd-admin-help-adhd.html -w 'GET /admin/help -> %{http_code}\n' --max-time 30` returned `200`
+- Passed initial render checks for `Start Here`, `Add or Edit Products`, `Sizes, Brands, Templates`, `Make a Bundle`, and `Orders, Content, Fixes`.
+
 ## Completed Feature Notes
 
 When a feature is actually finished, document it here with:
