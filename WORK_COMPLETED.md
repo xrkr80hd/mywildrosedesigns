@@ -234,6 +234,30 @@ Known limitation:
 
 - The safe checkout API verification was intentionally non-destructive, so it only confirmed route reachability and current environment status; it did not create a live order or complete a Stripe session.
 
+## Admin Tutorial Refresh
+
+- [x] The admin tutorial now matches the updated inventory/content workflow and is more usable on mobile.
+
+Completed behavior:
+
+- Rewrote the tutorial sections around Start Here, Login and Safety, Inventory Management, Products/Templates/Variants, Bundle Maker, Orders and Uploads, Content Management, and Quick Fixes.
+- Added guidance for the new Inventory Management System and Content Management System grouping.
+- Added practical instructions for product creation, template helpers, variant pricing, bundle creation, and mobile help use.
+- Reduced the mobile help entry from a large stacked banner to a compact row so it does not take over the phone screen.
+- Tightened the full help page spacing on mobile by hiding long table-of-contents summaries and reducing help section padding.
+
+Files changed:
+
+- `web/src/lib/admin-help-content.ts`
+- `web/src/components/admin-help-content.tsx`
+- `web/src/app/globals.css`
+
+Verification:
+
+- Passed: `cd web && npx eslint src/lib/admin-help-content.ts src/components/admin-help-content.tsx src/components/admin-help-shell.tsx src/app/admin/help/page.tsx`
+- Passed: `curl -sS -b /tmp/wrd-admin-cookies.txt http://localhost:3000/admin/help -o /tmp/wrd-admin-help-updated.html -w 'GET /admin/help -> %{http_code}\n' --max-time 30` returned `200`
+- Passed tutorial content checks for `Start Here`, `Products, Templates, and Variants`, `Bundle Maker`, `Login and Safety`, `Quick Fixes`, and `Content Management`.
+
 ## Completed Feature Notes
 
 When a feature is actually finished, document it here with:

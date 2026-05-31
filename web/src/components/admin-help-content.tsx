@@ -46,17 +46,21 @@ export function AdminHelpContent({ variant }: AdminHelpContentProps) {
       return;
     }
 
-    setOpenSectionId(nextId);
-    if (!hashId && storedId && variant === "page") {
-      setRestoredSectionId(storedId);
-    }
+    const frame = window.requestAnimationFrame(() => {
+      setOpenSectionId(nextId);
+      if (!hashId && storedId && variant === "page") {
+        setRestoredSectionId(storedId);
+      }
 
-    window.requestAnimationFrame(() => {
       const node = sectionRefs.current[nextId];
       if (hashId && node) {
         node.scrollIntoView({ block: "start", behavior: "auto" });
       }
     });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, [variant]);
 
   useEffect(() => {
