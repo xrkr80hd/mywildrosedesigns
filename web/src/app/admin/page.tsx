@@ -1100,11 +1100,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             Admin Tutorial
           </p>
           <p className="mt-1 text-lg font-semibold text-forest">
-            Johannah!! look at the dang tutorial!!!!
+            Father, we thank You for Your love.
           </p>
           <p className="mt-1 text-sm text-foreground/75">
-            Click this box to open the Dang Admin Tutorial before digging
-            through the dashboard blind.
+            We thank You for Your presence. We ask You to bless this business
+            and the Parkers. Bring the Parkers close to You, Lord, in every way
+            and in every walk. In Jesus&apos; name, we pray. Establish Your love
+            in our hearts, and call upon that establishment daily. In
+            Jesus&apos; name. Amen. Brother Ben.
           </p>
         </Link>
 
