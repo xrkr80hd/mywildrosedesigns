@@ -10,6 +10,10 @@ type CheckoutPageProps = {
 export const metadata: Metadata = {
   title: "Checkout",
   description: "Review your order details and complete secure Stripe checkout.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 function asSingle(value?: string | string[]) {

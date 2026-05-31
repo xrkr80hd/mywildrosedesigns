@@ -4,6 +4,10 @@ import { CartClient } from "@/components/cart-client";
 export const metadata: Metadata = {
   title: "Cart",
   description: "Review your selected products and continue to secure checkout.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function CartPage() {
@@ -20,4 +24,3 @@ export default function CartPage() {
     </main>
   );
 }
-

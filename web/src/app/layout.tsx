@@ -15,7 +15,7 @@ const bodyFont = Manrope({
 });
 
 const siteDescription =
-  "Custom apparel, school spirit wear, seasonal collections, and custom design uploads.";
+  "Custom apparel, school spirit wear, seasonal collections, personalized gifts, and custom design uploads from Wild Rose Designs.";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mywildrosedesigns.com";
 const metadataBase = new URL(siteUrl);
@@ -35,6 +35,18 @@ export const metadata: Metadata = {
     template: "%s | Wild Rose Designs",
   },
   description: siteDescription,
+  alternates: {
+    canonical: "/",
+  },
+  keywords: [
+    "custom apparel",
+    "custom shirts",
+    "school spirit wear",
+    "team shirts",
+    "seasonal gifts",
+    "personalized apparel",
+    "Wild Rose Designs",
+  ],
   openGraph: {
     type: "website",
     siteName: "Wild Rose Designs",

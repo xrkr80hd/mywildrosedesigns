@@ -5,9 +5,12 @@ import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Upload",
+  title: "Upload a Custom Design",
   description:
-    "Upload your custom design and submit your Wild Rose production request.",
+    "Upload artwork for a custom Wild Rose Designs apparel order, choose a print option, and submit production details.",
+  alternates: {
+    canonical: "/upload",
+  },
 };
 
 const steps = [

@@ -1,5 +1,15 @@
 import { ContactFormClient } from "@/components/contact-form-client";
 import { getSiteContentSettings } from "@/lib/site-content";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Contact",
+  description:
+    "Contact Wild Rose Designs for custom apparel quotes, school spirit wear, business shirts, and seasonal design requests.",
+  alternates: {
+    canonical: "/contact",
+  },
+};
 
 export default async function ContactPage() {
   const content = await getSiteContentSettings();

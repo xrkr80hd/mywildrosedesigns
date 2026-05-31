@@ -1,7 +1,15 @@
 import { AdminActionToast } from "@/components/admin-action-toast";
 import { AdminHelpShell } from "@/components/admin-help-shell";
 import { AdminUiState } from "@/components/admin-ui-state";
+import type { Metadata } from "next";
 import { Suspense } from "react";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function AdminLayout({
   children,

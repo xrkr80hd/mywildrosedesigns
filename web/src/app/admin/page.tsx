@@ -217,28 +217,35 @@ const DEFAULT_POPUP: PopupRow = {
 
 const ADMIN_NAV_GROUPS = [
   {
-    title: "Storefront",
+    title: "View Site",
+    description: "Check what customers see.",
     links: [
-      { href: "/", label: "Open Home" },
-      { href: "/shop", label: "Open Shop" },
-      { href: "/upload", label: "Open Upload" },
-      { href: "/about", label: "Open About" },
-      { href: "/contact", label: "Open Contact" },
+      { href: "/", label: "Home" },
+      { href: "/shop", label: "Shop" },
+      { href: "/cart", label: "Cart" },
+      { href: "/about", label: "About" },
+      { href: "/contact", label: "Contact" },
     ],
   },
   {
-    title: "Editor Tools",
+    title: "Manage Work",
+    description: "Add products, bundles, content, and orders.",
     links: [
-      { href: "/admin#inventory-management", label: "Inventory Management" },
-      { href: "/admin#content-management", label: "Content Management" },
-      { href: "/admin/content", label: "Edit About/Contact Content" },
-      { href: "/admin#product-inventory", label: "Manage Inventory" },
-      { href: "/admin/help", label: "Open the Dang Admin Tutorial" },
+      { href: "/admin#product-inventory", label: "Products" },
+      { href: "/admin#product-create", label: "Add Item" },
+      { href: "/admin#bundle-maker", label: "Bundles" },
+      { href: "/admin#content-management", label: "Content" },
+      { href: "/admin#orders-uploads", label: "Orders" },
     ],
   },
   {
-    title: "Session",
-    links: [{ href: "/logout", label: "Admin Sign Out" }],
+    title: "Help / Account",
+    description: "Tutorial, technical notes, and sign out.",
+    links: [
+      { href: "/admin/help", label: "Tutorial" },
+      { href: "/admin/apis", label: "API Notes" },
+      { href: "/logout", label: "Sign Out" },
+    ],
   },
 ] as const;
 
@@ -1111,10 +1118,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </p>
         </Link>
 
-        <details className="mt-5 rounded-2xl border border-rose/20 bg-white/70 p-3 md:hidden">
+        <details className="mt-5 border border-rose/20 bg-white/75 p-3 md:hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
             <span className="text-sm font-semibold text-forest">
-              Admin Menu
+              Quick Links
             </span>
             <span aria-hidden="true" className="inline-flex flex-col gap-1">
               <span className="h-[2px] w-5 bg-forest" />
@@ -1122,18 +1129,21 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               <span className="h-[2px] w-5 bg-forest" />
             </span>
           </summary>
-          <div className="mt-3 space-y-4">
+          <div className="mt-3 grid gap-3">
             {ADMIN_NAV_GROUPS.map((group) => (
-              <section key={group.title}>
+              <section key={group.title} className="border-l-2 border-rose/25 pl-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
                   {group.title}
                 </p>
-                <div className="mt-2 space-y-1.5">
+                <p className="mt-0.5 text-xs text-foreground/65">
+                  {group.description}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
                   {group.links.map((link) => (
                     <Link
                       key={link.href}
                       href={link.href}
-                      className="block text-sm font-semibold text-forest hover:text-rose"
+                      className="border border-forest/15 bg-white px-2.5 py-1.5 text-xs font-semibold text-forest hover:border-rose/30 hover:text-rose"
                     >
                       {link.label}
                     </Link>
@@ -1144,21 +1154,28 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </div>
         </details>
 
-        <div className="mt-5 hidden gap-3 md:grid md:grid-cols-3">
+        <nav
+          aria-label="Admin quick links"
+          className="mt-5 hidden border border-rose/20 bg-white/75 md:block"
+        >
+          <div className="grid divide-x divide-rose/15 md:grid-cols-3">
           {ADMIN_NAV_GROUPS.map((group) => (
             <section
               key={group.title}
-              className="rounded-2xl border border-rose/20 bg-white/70 p-3"
+              className="p-3"
             >
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">
                 {group.title}
               </p>
-              <div className="mt-2 space-y-1.5">
+              <p className="mt-0.5 text-xs text-foreground/65">
+                {group.description}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
                 {group.links.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="block text-sm font-semibold text-forest hover:text-rose"
+                    className="border border-forest/15 bg-white px-2.5 py-1.5 text-xs font-semibold text-forest hover:border-rose/30 hover:text-rose"
                   >
                     {link.label}
                   </Link>
@@ -1166,7 +1183,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </div>
             </section>
           ))}
-        </div>
+          </div>
+        </nav>
       </header>
 
       <AdminAttentionAlerts

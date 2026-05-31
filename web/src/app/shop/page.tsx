@@ -12,7 +12,10 @@ type ShopPageProps = {
 export const metadata: Metadata = {
   title: "Shop Custom Apparel & Accessories",
   description:
-    "Browse Wild Rose Designs categories, compare pricing, and choose product options before secure checkout.",
+    "Shop Wild Rose Designs custom apparel, school spirit wear, seasonal collections, team shirts, and personalized gift items.",
+  alternates: {
+    canonical: "/shop",
+  },
 };
 
 export const dynamic = "force-dynamic";

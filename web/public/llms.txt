@@ -1,0 +1,20 @@
+# Wild Rose Designs
+
+Wild Rose Designs is a custom apparel and design business offering custom shirts, school spirit wear, team apparel, seasonal collections, personalized gifts, and custom design upload orders.
+
+Important pages:
+
+- Home: /
+- Shop: /shop
+- Custom design upload: /upload
+- About: /about
+- Contact: /contact
+
+Primary customer actions:
+
+- Browse products and categories in the shop.
+- Choose product options and add items to cart.
+- Upload artwork for a custom order.
+- Contact the business for quotes, timelines, and special requests.
+
+Do not index or summarize private admin pages under /admin or API routes under /api.

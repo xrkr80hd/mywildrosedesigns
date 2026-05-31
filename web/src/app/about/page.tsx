@@ -4,7 +4,11 @@ import { getSiteContentSettings } from "@/lib/site-content";
 
 export const metadata: Metadata = {
   title: "About",
-  description: "Learn about Wild Rose Designs services and turnaround process.",
+  description:
+    "Learn about Wild Rose Designs custom apparel, school spirit wear, seasonal collections, and small-business design services.",
+  alternates: {
+    canonical: "/about",
+  },
 };
 
 export default async function AboutPage() {
@@ -75,4 +79,3 @@ export default async function AboutPage() {
     </main>
   );
 }
-

@@ -302,6 +302,51 @@ Verification:
 - Passed content checks for `Start Here`, `Add or Edit Products`, `Sizes, Brands, Templates`, `Make a Bundle`, and `Orders, Content, Fixes`.
 - Passed: `cd web && npm run build`
 
+## First-Pass Technical SEO and Admin Footer Cleanup
+
+- [x] First-pass technical SEO is implemented and the public storefront footer is removed from admin routes.
+
+Completed behavior:
+
+- Added Next.js-generated `robots.txt`.
+- Added Next.js-generated `sitemap.xml` with static storefront pages and product detail URLs.
+- Added `llms.txt` as a short AI-readable site summary.
+- Added noindex robots metadata for admin, cart, and checkout routes.
+- Strengthened page descriptions and canonical URLs for Home, Shop, Upload, About, and Contact.
+- Reworked the admin header quick links into flatter grouped controls for View Site, Manage Work, and Help / Account.
+- Moved the public footer into a route-aware component so `/admin` pages do not render the storefront footer.
+
+Files changed:
+
+- `web/src/app/layout.tsx`
+- `web/src/app/robots.ts`
+- `web/src/app/sitemap.ts`
+- `web/public/llms.txt`
+- `web/src/app/admin/layout.tsx`
+- `web/src/app/cart/page.tsx`
+- `web/src/app/checkout/page.tsx`
+- `web/src/app/about/page.tsx`
+- `web/src/app/contact/page.tsx`
+- `web/src/app/shop/page.tsx`
+- `web/src/app/upload/page.tsx`
+- `web/src/app/admin/page.tsx`
+- `web/src/components/site-shell.tsx`
+- `web/src/components/site-footer.tsx`
+
+Verification:
+
+- Passed: `cd web && npx eslint src/app/robots.ts src/app/sitemap.ts src/app/layout.tsx src/app/admin/layout.tsx src/app/about/page.tsx src/app/contact/page.tsx src/app/shop/page.tsx src/app/upload/page.tsx src/app/cart/page.tsx src/app/checkout/page.tsx src/components/site-shell.tsx src/components/site-footer.tsx src/app/admin/page.tsx`
+- Passed: `cd web && npm run build`
+- Passed: `curl http://localhost:3000/robots.txt` rendered admin/api/cart/checkout disallows and a sitemap URL.
+- Passed: `curl http://localhost:3000/sitemap.xml` rendered the storefront static routes and product URLs.
+- Passed: `curl http://localhost:3000/llms.txt` rendered the AI-readable Wild Rose Designs summary.
+- Passed: public Home route still renders the storefront footer text.
+- Passed: admin route check does not render the storefront footer text.
+
+Known limitation:
+
+- This is SEO pass 1 only. Rich product schema, FAQ content, local business details, and deeper product/category copy can be added in a later pass.
+
 ## Completed Feature Notes
 
 When a feature is actually finished, document it here with:
