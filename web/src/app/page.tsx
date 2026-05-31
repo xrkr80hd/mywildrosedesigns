@@ -124,15 +124,8 @@ export default async function Home() {
                 >
                   <Link
                     href={item.href}
-                    className="group flex h-full min-h-24 items-center gap-3 px-4 py-4 transition hover:bg-rose/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest sm:px-5"
+                    className="group flex h-full min-h-20 items-center gap-3 px-4 py-4 transition hover:bg-rose/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest sm:px-5"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-rose/20 bg-white font-serif text-xl leading-none text-rose transition group-hover:border-forest/25 group-hover:text-forest"
-                    >
-                      {item.title.charAt(0)}
-                    </span>
-
                     <span className="min-w-0 flex-1">
                       <span className="block text-base font-semibold text-forest">
                         {item.title}

@@ -59,5 +59,9 @@ export function getAdminCredentials() {
 }
 
 export function isAdminAuthBypassed(): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
+
   return (process.env.ADMIN_BYPASS_AUTH ?? "").trim().toLowerCase() === "true";
 }

@@ -1,9 +1,9 @@
 import { LoginForm } from "./login-form";
 
 type AdminLoginPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     next?: string | string[];
-  };
+  }>;
 };
 
 function normalizeNextPath(value?: string | string[]): string {
@@ -14,8 +14,9 @@ function normalizeNextPath(value?: string | string[]): string {
   return raw;
 }
 
-export default function AdminLoginPage({ searchParams }: AdminLoginPageProps) {
-  const nextPath = normalizeNextPath(searchParams?.next);
+export default async function AdminLoginPage({ searchParams }: AdminLoginPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const nextPath = normalizeNextPath(resolvedSearchParams?.next);
 
   return (
     <main className="admin-content mx-auto flex min-h-[70vh] w-full max-w-md items-center px-6 py-12">
