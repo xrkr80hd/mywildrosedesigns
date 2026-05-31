@@ -14,6 +14,7 @@ export const cartCheckoutItemSchema = z.object({
   variantId: z.string().trim().uuid().optional(),
   variantSize: z.string().trim().max(40).optional(),
   variantColor: z.string().trim().max(60).optional(),
+  variantBrand: z.string().trim().max(120).optional(),
   quantity: z.coerce.number().int().min(1).max(100),
 });
 

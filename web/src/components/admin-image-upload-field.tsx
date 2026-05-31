@@ -104,12 +104,12 @@ export function AdminImageUploadField({
       >
         <p className="font-semibold text-forest">Recommended size: {recommendedSize}</p>
         <p className="mt-1 text-foreground/70">{helperText}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="rounded-lg border border-forest/25 bg-white px-3 py-1.5 text-xs font-semibold text-forest"
+            className="w-full rounded-lg border border-forest/25 bg-white px-3 py-1.5 text-xs font-semibold text-forest sm:w-auto"
           >
             {isUploading ? "Uploading..." : "Choose Image"}
           </button>

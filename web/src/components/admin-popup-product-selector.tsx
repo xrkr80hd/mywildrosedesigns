@@ -40,13 +40,20 @@ export function AdminPopupProductSelector({
     [products, selectedId],
   );
 
+  function formatOptionLabel(product: PopupProductOption) {
+    const stateSuffix = product.active ? "" : " • inactive";
+    const skuSuffix = product.sku ? ` • ${product.sku}` : "";
+
+    return `${product.title}${skuSuffix}${stateSuffix}`;
+  }
+
   return (
     <div className="space-y-2">
       <input
         type="search"
         value={query}
         onChange={(event) => setQuery(event.currentTarget.value)}
-        placeholder="Search by product title, slug, SKU, or ID"
+        placeholder="Search by title, slug, SKU, or ID"
         className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
       />
 
@@ -59,15 +66,14 @@ export function AdminPopupProductSelector({
         <option value="">No product selected</option>
         {filteredProducts.map((product) => (
           <option key={product.id} value={product.id}>
-            {product.title} ({product.slug}){product.sku ? ` • ${product.sku}` : ""}
-            {product.active ? "" : " • inactive"}
+            {formatOptionLabel(product)}
           </option>
         ))}
       </select>
 
-      <p className="text-xs text-foreground/70">
+      <p className="text-xs leading-relaxed text-foreground/70">
         {selectedProduct
-          ? `Selected: ${selectedProduct.title} (${selectedProduct.slug})`
+          ? `Selected: ${selectedProduct.title}${selectedProduct.sku ? ` • ${selectedProduct.sku}` : ""} (${selectedProduct.slug})`
           : "No product selected."}
       </p>
     </div>

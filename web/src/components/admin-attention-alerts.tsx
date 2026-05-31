@@ -133,7 +133,7 @@ export function AdminAttentionAlerts({
     <section className="mt-4 space-y-3">
       {showMessageAlert ? (
         <div className="rounded-2xl border border-rose/30 bg-white/92 p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gold">
                 Attention Needed
@@ -142,17 +142,17 @@ export function AdminAttentionAlerts({
                 You have {newMessageCount} new customer message{newMessageCount === 1 ? "" : "s"}.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
               <Link
                 href="#customer-messages"
-                className="rounded-lg border border-forest/20 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                className="rounded-lg border border-forest/20 bg-white px-3 py-2 text-center text-xs font-semibold text-forest hover:bg-forest hover:text-white"
               >
                 Review Messages
               </Link>
               <button
                 type="button"
                 onClick={markMessagesRead}
-                className="rounded-lg border border-rose/30 px-3 py-2 text-xs font-semibold text-rose hover:bg-rose hover:text-white"
+                className="rounded-lg border border-rose/30 px-3 py-2 text-center text-xs font-semibold text-rose hover:bg-rose hover:text-white"
               >
                 Mark Read
               </button>
@@ -163,7 +163,7 @@ export function AdminAttentionAlerts({
 
       {showOrderAlert ? (
         <div className="rounded-2xl border border-forest/25 bg-surface/90 p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gold">
                 Order Queue
@@ -172,17 +172,17 @@ export function AdminAttentionAlerts({
                 You have {newOrderCount} order{newOrderCount === 1 ? "" : "s"} waiting in Orders and Uploads.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
               <Link
                 href="#orders-uploads"
-                className="rounded-lg border border-forest/20 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                className="rounded-lg border border-forest/20 bg-white px-3 py-2 text-center text-xs font-semibold text-forest hover:bg-forest hover:text-white"
               >
                 Review Orders
               </Link>
               <button
                 type="button"
                 onClick={markOrdersRead}
-                className="rounded-lg border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                className="rounded-lg border border-forest/25 px-3 py-2 text-center text-xs font-semibold text-forest hover:bg-forest hover:text-white"
               >
                 Mark Read
               </button>

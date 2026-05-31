@@ -193,6 +193,8 @@ export type Database = {
           product_id: string;
           size_value: string | null;
           color_value: string | null;
+          brand_name: string | null;
+          source_template_id: string | null;
           sku: string | null;
           price_override_cents: number | null;
           stock_on_hand: number;
@@ -205,6 +207,8 @@ export type Database = {
           product_id: string;
           size_value?: string | null;
           color_value?: string | null;
+          brand_name?: string | null;
+          source_template_id?: string | null;
           sku?: string | null;
           price_override_cents?: number | null;
           stock_on_hand?: number;
@@ -217,10 +221,96 @@ export type Database = {
           product_id?: string;
           size_value?: string | null;
           color_value?: string | null;
+          brand_name?: string | null;
+          source_template_id?: string | null;
           sku?: string | null;
           price_override_cents?: number | null;
           stock_on_hand?: number;
           active?: boolean;
+        };
+        Relationships: [];
+      };
+      variant_templates: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          name: string;
+          brand_name: string;
+          active: boolean;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          name: string;
+          brand_name: string;
+          active?: boolean;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          name?: string;
+          brand_name?: string;
+          active?: boolean;
+        };
+        Relationships: [];
+      };
+      variant_template_sizes: {
+        Row: {
+          id: string;
+          created_at: string;
+          template_id: string;
+          size_label: string;
+          size_sort_order: number;
+          price_cents: number;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          template_id: string;
+          size_label: string;
+          size_sort_order?: number;
+          price_cents: number;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          template_id?: string;
+          size_label?: string;
+          size_sort_order?: number;
+          price_cents?: number;
+        };
+        Relationships: [];
+      };
+      bundle_components: {
+        Row: {
+          id: string;
+          created_at: string;
+          bundle_product_id: string;
+          component_product_id: string;
+          component_variant_id: string | null;
+          quantity: number;
+          sort_order: number;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          bundle_product_id: string;
+          component_product_id: string;
+          component_variant_id?: string | null;
+          quantity?: number;
+          sort_order?: number;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          bundle_product_id?: string;
+          component_product_id?: string;
+          component_variant_id?: string | null;
+          quantity?: number;
+          sort_order?: number;
         };
         Relationships: [];
       };

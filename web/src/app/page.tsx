@@ -1,64 +1,49 @@
 import Link from "next/link";
 import Image from "next/image";
+import { FeaturedProductsCarousel } from "@/components/featured-products-carousel";
+import { HomepageOrderSection } from "@/components/homepage-order-section";
 import { HotItemPopup } from "@/components/hot-item-popup";
 import { ProductListingCard } from "@/components/product-listing-card";
+import { getUploadProductOptions } from "@/lib/product-options-store";
 import { getStorefrontData } from "@/lib/storefront";
 
-const steps = [
-  {
-    title: "Upload Your Design",
-    detail:
-      "Share your artwork and production notes. We support PNG, JPG, PDF, SVG, and AI files.",
-  },
-  {
-    title: "Pay Securely",
-    detail:
-      "Checkout is powered by Stripe so your customer payment flow is fast and trusted.",
-  },
-  {
-    title: "We Print and Deliver",
-    detail:
-      "Wild Rose Designs reviews every order and keeps you updated through production.",
-  },
+const customOrderSteps = [
+  "Submit your file and order details.",
+  "We verify print quality and production notes.",
+  "Stripe checkout secures payment.",
+  "Production starts and status updates are tracked in admin.",
 ];
 
 const siteGuide = [
   {
     title: "Shop",
     href: "/shop",
-    description: "Browse all active categories and products, including featured and seasonal drops.",
-    cta: "Open Shop",
-  },
-  {
-    title: "Upload",
-    href: "/upload",
-    description: "Send your artwork and order details for custom apparel, prints, and merch runs.",
-    cta: "Open Upload",
+    tagline: "Collections and current drops.",
   },
   {
     title: "About",
     href: "/about",
-    description: "Learn about Wild Rose Designs, the process, and what kinds of projects we take on.",
-    cta: "Open About",
+    tagline: "Our story and process.",
   },
   {
     title: "Contact",
     href: "/contact",
-    description: "Reach out for quotes, team orders, timeline questions, and special requests.",
-    cta: "Open Contact",
+    tagline: "Quotes, timelines, special requests.",
   },
   {
     title: "Cart",
     href: "/cart",
-    description: "Review your selected items, quantities, and checkout before placing your order.",
-    cta: "Open Cart",
+    tagline: "Review items and checkout.",
   },
 ];
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const data = await getStorefrontData();
+  const [data, uploadOptions] = await Promise.all([
+    getStorefrontData(),
+    getUploadProductOptions(),
+  ]);
   const featured = data.featuredProducts.length
     ? data.featuredProducts.slice(0, 3)
     : data.products.slice(0, 3);
@@ -89,10 +74,10 @@ export default async function Home() {
         />
       ) : null}
 
-      <section className="mx-auto w-full max-w-5xl px-6 py-10 lg:py-12">
+      <section className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:py-12">
         <div className="rounded-3xl border border-rose/20 bg-white/80 p-6 text-center shadow-sm sm:p-8">
           <p className="hero-kicker">{data.settings.heroBadge}</p>
-          <h1 className="mx-auto mt-4 max-w-3xl text-4xl leading-tight text-forest sm:text-5xl">
+          <h1 className="mx-auto mt-4 max-w-3xl text-3xl leading-tight text-forest sm:text-4xl lg:text-5xl">
             {data.settings.heroTitle}
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base text-foreground/80 sm:text-lg">
@@ -115,33 +100,66 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-6 pb-12">
-        <h2 className="mb-2 text-3xl text-forest">Site Guide</h2>
-        <p className="mb-4 text-sm text-foreground/75">
-          Quick jump into each main page.
-        </p>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {siteGuide.map((item) => (
-            <article
-              key={item.href}
-              className="rounded-2xl border border-rose/20 bg-white/90 p-5 shadow-sm"
-            >
-              <h3 className="text-2xl text-forest">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-foreground/80">{item.description}</p>
-              <Link
-                href={item.href}
-                className="mt-4 inline-flex rounded-xl border border-forest/20 bg-white px-4 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
-              >
-                {item.cta}
-              </Link>
-            </article>
-          ))}
-        </div>
+      <section className="mx-auto w-full max-w-4xl px-4 pb-12 sm:px-6">
+        <nav
+          aria-label="Site guide"
+          className="overflow-hidden rounded-2xl border border-rose/20 bg-white/90 shadow-sm"
+        >
+          <div className="grid gap-0 md:grid-cols-[0.82fr_1.18fr]">
+            <div className="border-b border-rose/15 bg-surface/80 px-5 py-5 md:border-b-0 md:border-r md:px-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">
+                Explore
+              </p>
+              <h2 className="mt-2 text-2xl text-forest sm:text-3xl">Start Here</h2>
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-foreground/70">
+                Jump straight to shopping, custom orders, questions, or checkout.
+              </p>
+            </div>
+
+            <ul className="grid divide-y divide-rose/15 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+              {siteGuide.map((item, index) => (
+                <li
+                  key={item.href}
+                  className={index > 1 ? "sm:border-t sm:border-rose/15" : undefined}
+                >
+                  <Link
+                    href={item.href}
+                    className="group flex h-full min-h-24 items-center gap-3 px-4 py-4 transition hover:bg-rose/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest sm:px-5"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-rose/20 bg-white font-serif text-xl leading-none text-rose transition group-hover:border-forest/25 group-hover:text-forest"
+                    >
+                      {item.title.charAt(0)}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-base font-semibold text-forest">
+                        {item.title}
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-snug text-foreground/65">
+                        {item.tagline}
+                      </span>
+                    </span>
+
+                    <span
+                      aria-hidden="true"
+                      className="text-base leading-none text-forest/40 transition group-hover:translate-x-0.5 group-hover:text-forest"
+                    >
+                      →
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </nav>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-6 pb-16">
+      <section className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6">
         <h2 className="mb-4 text-3xl text-forest">Featured Products</h2>
-        <div className="grid auto-rows-fr gap-4 md:grid-cols-3">
+        <FeaturedProductsCarousel products={featured} />
+        <div className="hidden auto-rows-fr gap-4 md:grid md:grid-cols-3">
           {featured.map((product) => (
             <ProductListingCard
               key={product.id}
@@ -154,7 +172,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-6 pb-16">
+      <section className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6">
         <h2 className="mb-4 text-3xl text-forest">Homepage Highlights</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {data.welcomePosts.slice(0, 3).map((post) => (
@@ -177,27 +195,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-6 pb-16">
-        <div className="rose-panel rounded-3xl border border-rose/20 p-7 md:p-10">
-          <h2 className="text-3xl text-forest">How it works</h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {steps.map((step, index) => (
-              <article
-                key={step.title}
-                className="rounded-2xl bg-white/85 p-5 shadow-sm ring-1 ring-black/5"
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gold">
-                  Step {index + 1}
-                </p>
-                <h3 className="mt-2 text-xl text-forest">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-foreground/80">
-                  {step.detail}
-                </p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      <HomepageOrderSection options={uploadOptions} steps={customOrderSteps} />
     </main>
   );
 }

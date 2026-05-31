@@ -13,6 +13,7 @@ export type StorefrontVariant = {
   id: string;
   sizeValue: string | null;
   colorValue: string | null;
+  brandName: string | null;
   label: string;
   sku: string | null;
   basePriceCents: number;
@@ -325,7 +326,7 @@ export async function getStorefrontData() {
       const variantResult = await supabase
         .from("product_variants")
         .select(
-          "id, product_id, size_value, color_value, sku, price_override_cents, stock_on_hand, active",
+          "id, product_id, size_value, color_value, brand_name, sku, price_override_cents, stock_on_hand, active",
         )
         .in("product_id", productIds)
         .eq("active", true)
@@ -360,12 +361,16 @@ export async function getStorefrontData() {
           const colorValue = row.color_value
             ? String(row.color_value).trim()
             : null;
-          const label = [sizeValue, colorValue].filter(Boolean).join(" • ");
+          const brandName = row.brand_name ? String(row.brand_name).trim() : null;
+          const label = [sizeValue, colorValue, brandName]
+            .filter(Boolean)
+            .join(" • ");
 
           const normalizedVariant: StorefrontVariant = {
             id: String(row.id ?? ""),
             sizeValue,
             colorValue,
+            brandName,
             label,
             sku: row.sku ? String(row.sku) : null,
             basePriceCents: variantBasePrice,

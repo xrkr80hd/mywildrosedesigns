@@ -75,6 +75,7 @@ export async function POST(request: Request) {
         variantId?: string;
         variantSize?: string;
         variantColor?: string;
+        variantBrand?: string;
         quantity: number;
       }
     >();
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
           variantId,
           variantSize: item.variantSize?.trim() || undefined,
           variantColor: item.variantColor?.trim() || undefined,
+          variantBrand: item.variantBrand?.trim() || undefined,
           quantity: Math.min(item.quantity, 100),
         });
       }
@@ -157,7 +159,7 @@ export async function POST(request: Request) {
     const variantResult = await supabase
       .from("product_variants")
       .select(
-        "id, product_id, size_value, color_value, sku, price_override_cents, stock_on_hand, active",
+        "id, product_id, size_value, color_value, brand_name, sku, price_override_cents, stock_on_hand, active",
       )
       .in("product_id", productIds)
       .eq("active", true);
@@ -221,7 +223,8 @@ export async function POST(request: Request) {
 
       const variantSize = variant?.size_value?.trim() || requestedLine.variantSize || undefined;
       const variantColor = variant?.color_value?.trim() || requestedLine.variantColor || undefined;
-      const variantParts = [variantSize, variantColor].filter(Boolean);
+      const variantBrand = variant?.brand_name?.trim() || requestedLine.variantBrand || undefined;
+      const variantParts = [variantSize, variantColor, variantBrand].filter(Boolean);
       const variantLabel = variantParts.join(" • ");
       const unitBasePriceCents =
         typeof variant?.price_override_cents === "number" && variant.price_override_cents > 0
@@ -242,6 +245,7 @@ export async function POST(request: Request) {
         variantLabel,
         sizeValue: variantSize ?? null,
         colorValue: variantColor ?? null,
+        brandName: variantBrand ?? null,
         description: product.description,
         quantity: requestedLine.quantity,
         unitAmountCents,

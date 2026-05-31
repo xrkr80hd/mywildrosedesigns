@@ -7,6 +7,7 @@ export type CartItem = {
   variantId?: string;
   variantSize?: string;
   variantColor?: string;
+  variantBrand?: string;
   productSlug?: string;
   title: string;
   price: number;
@@ -32,8 +33,8 @@ export function buildCartLineId(productId: string, variantId?: string): string {
   return variantId ? `${productId}::${variantId}` : productId;
 }
 
-export function formatVariantLabel(item: Pick<CartItem, "variantSize" | "variantColor">): string {
-  const parts = [item.variantSize, item.variantColor].filter(Boolean);
+export function formatVariantLabel(item: Pick<CartItem, "variantSize" | "variantColor" | "variantBrand">): string {
+  const parts = [item.variantSize, item.variantColor, item.variantBrand].filter(Boolean);
   return parts.join(" • ");
 }
 
@@ -83,6 +84,7 @@ export function sanitizeCartItems(rawValue: unknown): CartItem[] {
       variantId,
       variantSize: cleanOptionalText((candidate as { variantSize?: unknown }).variantSize, 40),
       variantColor: cleanOptionalText((candidate as { variantColor?: unknown }).variantColor, 60),
+      variantBrand: cleanOptionalText((candidate as { variantBrand?: unknown }).variantBrand, 120),
       productSlug: cleanOptionalText((candidate as { productSlug?: unknown }).productSlug, 180),
       title,
       price,

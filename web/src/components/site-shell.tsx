@@ -7,7 +7,6 @@ const navLinks = [
   { href: "/", label: "Home" },
   { href: "/shop", label: "Shop" },
   { href: "/cart", label: "Cart" },
-  { href: "/upload", label: "Upload" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
 ];
@@ -18,20 +17,20 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-[80] border-b border-rose/20 bg-white/90 backdrop-blur md:static md:z-auto">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:gap-4 sm:px-6">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
           <Link
             href="/"
-            className="group inline-flex min-w-0 flex-1 items-center gap-3"
+            className="group inline-flex min-w-0 flex-1 items-center gap-2 sm:gap-3"
           >
             <Image
               src="/assets/img/MyWRDLogo.png"
               alt="Wild Rose Designs"
               width={40}
               height={40}
-              className="h-10 w-10 rounded-full border border-rose/25 bg-surface object-cover"
+              className="h-9 w-9 rounded-full border border-rose/25 bg-surface object-cover sm:h-10 sm:w-10"
             />
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-forest group-hover:text-rose">
+              <p className="truncate text-[0.95rem] font-semibold text-forest group-hover:text-rose sm:text-base">
                 Wild Rose Designs
               </p>
               <p className="hidden text-xs uppercase tracking-[0.14em] text-foreground/60 sm:block">
@@ -58,7 +57,7 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
       {children}
 
       <footer className="border-t border-rose/20 bg-white/85">
-        <div className="mx-auto grid w-full max-w-6xl gap-6 px-6 py-10 md:grid-cols-4">
+        <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-4">
           <div>
             <h3 className="text-lg text-forest">Wild Rose Designs</h3>
             <p className="mt-2 text-sm text-foreground/75">
@@ -96,9 +95,6 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
               Custom
             </h4>
             <div className="mt-3 space-y-2 text-sm">
-              <Link className="block hover:text-rose" href="/upload">
-                Upload Design
-              </Link>
               <Link className="block hover:text-rose" href="/contact">
                 Request Quote
               </Link>

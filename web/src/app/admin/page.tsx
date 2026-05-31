@@ -1,12 +1,21 @@
 ﻿import { AdminAttentionAlerts } from "@/components/admin-attention-alerts";
+import { AdminBundleMaker } from "@/components/admin-bundle-maker";
+import { AdminCategorySaveButton } from "@/components/admin-category-save-button";
 import { AdminConfirmSubmitButton } from "@/components/admin-confirm-submit-button";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
+import { AdminNewProductTemplateFields } from "@/components/admin-new-product-template-fields";
 import { AdminPopupProductSelector } from "@/components/admin-popup-product-selector";
+import {
+  AdminVariantTemplatePanel,
+  type AdminVariantTemplate,
+} from "@/components/admin-variant-template-panel";
+import { AdminVariantSizeField } from "@/components/admin-variant-size-field";
 import { PrintOrderLabelButton } from "@/components/print-order-label-button";
 import { ShareProductButton } from "@/components/share-product-button";
 import { getUploadBucket, hasSupabaseServerEnv } from "@/lib/env";
 import { parseFulfillmentNotes } from "@/lib/fulfillment-notes";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
+import { formatSizeValue } from "@/lib/product-variants";
 import type { ProductOptionAdminRow } from "@/lib/product-options-store";
 import { getUploadProductOptionsForAdmin } from "@/lib/product-options-store";
 import { getSiteContentSettings } from "@/lib/site-content";
@@ -16,10 +25,13 @@ import type { ReactNode } from "react";
 import {
     archiveOrder,
     archiveResolvedOrders,
+    applyVariantTemplate,
     clearArchivedOrders,
     createCategory,
+    createBundleProduct,
     createProduct,
     createProductVariant,
+    createVariantTemplate,
     createUploadTransferOption,
     createWelcomePost,
     deleteCategory,
@@ -100,6 +112,8 @@ type ProductVariantRow = {
   product_id: string;
   size_value: string | null;
   color_value: string | null;
+  brand_name: string | null;
+  source_template_id: string | null;
   sku: string | null;
   price_override_cents: number | null;
   stock_on_hand: number;
@@ -215,6 +229,8 @@ const ADMIN_NAV_GROUPS = [
   {
     title: "Editor Tools",
     links: [
+      { href: "/admin#inventory-management", label: "Inventory Management" },
+      { href: "/admin#content-management", label: "Content Management" },
       { href: "/admin/content", label: "Edit About/Contact Content" },
       { href: "/admin#product-inventory", label: "Manage Inventory" },
       { href: "/admin/help", label: "Open the Dang Admin Tutorial" },
@@ -228,12 +244,12 @@ const ADMIN_NAV_GROUPS = [
 
 function AdminLocalPreviewMode() {
   return (
-    <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-6 py-10">
-      <header className="rounded-3xl border border-rose/20 bg-surface p-7 shadow-sm">
+    <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
+      <header className="rounded-2xl border border-rose/20 bg-surface p-5 shadow-sm sm:rounded-3xl sm:p-7">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">
           Wild Rose Admin
         </p>
-        <h1 className="mt-2 text-4xl text-forest">Local Preview Mode</h1>
+        <h1 className="mt-2 text-3xl text-forest sm:text-4xl">Local Preview Mode</h1>
         <p className="mt-2 max-w-3xl text-sm text-foreground/75">
           Docker is running with local admin credentials, but Supabase server
           envs are empty. The floating help system and local content editor are
@@ -436,7 +452,11 @@ function isMissingColumnError(error: unknown, columnName: string): boolean {
 }
 
 function formatVariantLabel(variant: ProductVariantRow): string {
-  const parts = [variant.size_value, variant.color_value].filter(Boolean);
+  const parts = [
+    formatSizeValue(variant.size_value),
+    variant.color_value,
+    variant.brand_name,
+  ].filter(Boolean);
   return parts.join(" • ") || "Default option";
 }
 
@@ -623,7 +643,7 @@ async function getProductVariants() {
   const result = await supabase
     .from("product_variants")
     .select(
-      "id, product_id, size_value, color_value, sku, price_override_cents, stock_on_hand, active",
+      "id, product_id, size_value, color_value, brand_name, source_template_id, sku, price_override_cents, stock_on_hand, active",
     )
     .order("created_at", { ascending: true });
 
@@ -631,10 +651,86 @@ async function getProductVariants() {
     if (isMissingTableError(result.error, "product_variants")) {
       return [];
     }
+    if (
+      isMissingColumnError(result.error, "brand_name") ||
+      isMissingColumnError(result.error, "source_template_id")
+    ) {
+      const fallbackResult = await supabase
+        .from("product_variants")
+        .select(
+          "id, product_id, size_value, color_value, sku, price_override_cents, stock_on_hand, active",
+        )
+        .order("created_at", { ascending: true });
+
+      return ((fallbackResult.data ?? []) as Omit<
+        ProductVariantRow,
+        "brand_name" | "source_template_id"
+      >[]).map((variant) => ({
+        ...variant,
+        brand_name: null,
+        source_template_id: null,
+      }));
+    }
     return [];
   }
 
   return (result.data ?? []) as ProductVariantRow[];
+}
+
+async function getVariantTemplates(): Promise<AdminVariantTemplate[]> {
+  const supabase = getSupabaseAdminClient();
+  const templateResult = await supabase
+    .from("variant_templates")
+    .select("id, name, brand_name, active")
+    .order("name", { ascending: true });
+
+  if (templateResult.error) {
+    if (isMissingTableError(templateResult.error, "variant_templates")) {
+      return [];
+    }
+    return [];
+  }
+
+  const templates = (templateResult.data ?? []) as Omit<
+    AdminVariantTemplate,
+    "sizes"
+  >[];
+  const templateIds = templates.map((template) => template.id);
+
+  if (templateIds.length === 0) {
+    return [];
+  }
+
+  const sizeResult = await supabase
+    .from("variant_template_sizes")
+    .select("id, template_id, size_label, size_sort_order, price_cents")
+    .in("template_id", templateIds)
+    .order("size_sort_order", { ascending: true });
+
+  if (sizeResult.error) {
+    return templates.map((template) => ({ ...template, sizes: [] }));
+  }
+
+  const sizesByTemplateId = new Map<
+    string,
+    AdminVariantTemplate["sizes"]
+  >();
+  (sizeResult.data ?? []).forEach((size) => {
+    const templateId = String(size.template_id);
+    const current = sizesByTemplateId.get(templateId) ?? [];
+    current.push({
+      id: String(size.id),
+      size_label: String(size.size_label),
+      size_sort_order: Number(size.size_sort_order),
+      price_cents: Number(size.price_cents),
+    });
+    sizesByTemplateId.set(templateId, current);
+  });
+
+  return templates.map((template) => ({
+    ...template,
+    sizes: sizesByTemplateId.get(template.id) ?? [],
+  }));
 }
 
 async function getFunnelEvents() {
@@ -814,28 +910,58 @@ function AdminDropdownSection({
   persistKey,
   title,
   description,
+  tone = "rose",
   children,
 }: {
   id?: string;
   persistKey: string;
   title: string;
   description: string;
+  tone?: "rose" | "forest" | "gold" | "sage" | "blue";
   children: ReactNode;
 }) {
+  const toneClass = {
+    rose: {
+      shell: "border-rose/20 bg-white/85",
+      heading: "text-forest",
+      caret: "bg-rose/10 text-rose-900",
+    },
+    forest: {
+      shell: "border-forest/25 bg-emerald-50/70",
+      heading: "text-forest",
+      caret: "bg-forest/10 text-forest",
+    },
+    gold: {
+      shell: "border-gold/35 bg-amber-50/80",
+      heading: "text-amber-900",
+      caret: "bg-gold/20 text-amber-900",
+    },
+    sage: {
+      shell: "border-lime-300/60 bg-lime-50/70",
+      heading: "text-lime-900",
+      caret: "bg-lime-200/70 text-lime-900",
+    },
+    blue: {
+      shell: "border-sky-200 bg-sky-50/70",
+      heading: "text-sky-950",
+      caret: "bg-sky-100 text-sky-950",
+    },
+  }[tone];
+
   return (
     <details
       id={id}
       data-admin-key={persistKey}
-      className="mt-7 rounded-2xl border border-rose/20 bg-white/85 p-5"
+      className={`mt-7 rounded-2xl border p-5 ${toneClass.shell}`}
     >
       <summary className="admin-expand-summary flex cursor-pointer list-none items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl text-forest">{title}</h2>
+          <h2 className={`text-2xl ${toneClass.heading}`}>{title}</h2>
           <p className="mt-1 text-sm text-foreground/70">{description}</p>
         </div>
         <span
           aria-hidden="true"
-          className="admin-expand-caret mt-1 rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+          className={`admin-expand-caret mt-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${toneClass.caret}`}
         >
           &#9662;
         </span>
@@ -869,6 +995,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     categories,
     products,
     productVariants,
+    variantTemplates,
     homepage,
     popup,
     siteContent,
@@ -883,6 +1010,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     getCategories(),
     getProducts(),
     getProductVariants(),
+    getVariantTemplates(),
     getHomepageSettings(),
     getPopup(),
     getSiteContentSettings(),
@@ -901,6 +1029,13 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     label: category.name,
     items: products.filter((product) => product.category_id === category.id),
   }));
+  const productCountByCategoryId = new Map<string, number>();
+  for (const product of products) {
+    productCountByCategoryId.set(
+      product.category_id,
+      (productCountByCategoryId.get(product.category_id) ?? 0) + 1,
+    );
+  }
   const uncategorizedProducts = products.filter(
     (product) => !categoryNameById.has(product.category_id),
   );
@@ -946,12 +1081,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     popupLinkedProduct?.slug ?? extractShopSlugFromHref(popup.cta_href);
 
   return (
-    <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-6 py-10">
-      <header className="rounded-3xl border border-rose/20 bg-surface p-7 shadow-sm">
+    <main className="admin-content mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
+      <header className="rounded-2xl border border-rose/20 bg-surface p-5 shadow-sm sm:rounded-3xl sm:p-7">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">
           Wild Rose Admin
         </p>
-        <h1 className="mt-2 text-4xl text-forest">Full Site Control Center</h1>
+        <h1 className="mt-2 text-3xl text-forest sm:text-4xl">Full Site Control Center</h1>
         <p className="mt-2 text-sm text-foreground/75">
           Manage homepage copy, categories, products, welcome cards, customer
           messages, uploads, and orders from one dashboard.
@@ -959,7 +1094,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
         <Link
           href="/admin/help"
-          className="mt-5 block rounded-2xl border border-rose/30 bg-rose/10 px-4 py-4 text-left transition hover:border-rose/50 hover:bg-rose/15"
+          className="mt-5 block rounded-2xl border border-rose/30 bg-rose/10 px-4 py-4 text-left transition hover:border-rose/50 hover:bg-rose/15 sm:px-5"
         >
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gold">
             Admin Tutorial
@@ -1039,341 +1174,71 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       />
 
       <AdminDropdownSection
-        persistKey="homepage-hero"
-        title="Homepage Hero"
-        description="This controls the top-left copy block on the home page."
+        id="inventory-management"
+        persistKey="inventory-management"
+        title="Inventory Management System"
+        description="Products, categories, bundle setup, pricing, sales tracking, and order work live here."
+        tone="forest"
       >
-        <form
-          action={saveHomepageSettings}
-          className="mt-4 grid gap-3 md:grid-cols-2"
+        <AdminDropdownSection
+          id="product-inventory"
+          persistKey="product-inventory"
+          title="Product Inventory"
+          description="Product cards are collapsed by default to keep the backend concise and scannable."
+          tone="sage"
         >
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Badge
-            </span>
-            <input
-              name="heroBadge"
-              defaultValue={homepage.hero_badge}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Title
-            </span>
-            <input
-              name="heroTitle"
-              defaultValue={homepage.hero_title}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Description
-            </span>
-            <textarea
-              name="heroDescription"
-              rows={3}
-              defaultValue={homepage.hero_description}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Primary CTA Label
-            </span>
-            <input
-              name="primaryCtaLabel"
-              defaultValue={homepage.primary_cta_label}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Primary CTA Link
-            </span>
-            <input
-              name="primaryCtaHref"
-              defaultValue={homepage.primary_cta_href}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Secondary CTA Label
-            </span>
-            <input
-              name="secondaryCtaLabel"
-              defaultValue={homepage.secondary_cta_label}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Secondary CTA Link
-            </span>
-            <input
-              name="secondaryCtaHref"
-              defaultValue={homepage.secondary_cta_href}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <div className="md:col-span-2">
-            <button
-              type="submit"
-              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
-            >
-              Save Homepage Hero
-            </button>
-          </div>
-        </form>
-      </AdminDropdownSection>
-
-      <AdminDropdownSection
-        persistKey="promo-popup"
-        title="Promotional Popup"
-        description="This controls the popup modal only. It is separate from featured products and homepage feature cards."
-      >
-        <form
-          action={savePromoPopup}
-          className="mt-4 grid gap-3 md:grid-cols-2"
-        >
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Popup Label
-            </span>
-            <input
-              name="promoLabel"
-              defaultValue={popup.promo_label}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Title
-            </span>
-            <input
-              name="title"
-              defaultValue={popup.title}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              CTA Text
-            </span>
-            <input
-              name="ctaText"
-              defaultValue={popup.cta_text}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <fieldset className="space-y-2">
-            <legend className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              CTA Target Mode
-            </legend>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-forest">
-              <input
-                type="radio"
-                name="popupCtaMode"
-                value="slug"
-                defaultChecked={popupDefaultMode === "slug"}
-              />
-              Slug entry
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-forest">
-              <input
-                type="radio"
-                name="popupCtaMode"
-                value="inventory"
-                defaultChecked={popupDefaultMode === "inventory"}
-              />
-              Inventory selection
-            </label>
-          </fieldset>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              CTA Slug (slug mode)
-            </span>
-            <input
-              name="ctaSlug"
-              defaultValue={popupDefaultSlug}
-              placeholder="example-product-slug"
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-            <p className="text-xs text-foreground/65">
-              Slug mode resolves to <code>/shop/[slug]</code>.
-            </p>
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Message
-            </span>
-            <textarea
-              name="message"
-              rows={2}
-              defaultValue={popup.message}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Inventory Target (searchable)
-            </span>
-            <AdminPopupProductSelector
-              products={products.map((product) => ({
-                id: product.id,
-                title: product.title,
-                slug: product.slug,
-                sku: product.sku,
-                active: product.active,
-              }))}
-              defaultProductId={popup.product_id}
-            />
-            <p className="text-xs text-foreground/65">
-              Inventory mode links CTA to a selected product while keeping
-              frontend popup behavior unchanged.
-            </p>
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Fallback CTA Link
-            </span>
-            <input
-              name="ctaHref"
-              defaultValue={popup.cta_href}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-            <p className="text-xs text-foreground/65">
-              Used when slug mode has no slug or no inventory item is selected.
-            </p>
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Current Product Link
-            </span>
-            <p className="rounded-xl border border-rose/20 bg-surface px-3 py-2 text-sm text-foreground/80">
-              {popupLinkedProduct
-                ? `${popupLinkedProduct.title} (${popupLinkedProduct.slug})`
-                : "No product linked"}
-            </p>
-          </label>
-          <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
-            <input
-              type="checkbox"
-              name="enabled"
-              defaultChecked={popup.enabled}
-            />{" "}
-            Popup enabled
-          </label>
-          <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
-            <input
-              type="checkbox"
-              name="showCta"
-              defaultChecked={popup.show_cta}
-            />{" "}
-            Show CTA button
-          </label>
-          <div className="md:col-span-2">
-            <button
-              type="submit"
-              className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
-            >
-              Save Popup
-            </button>
-          </div>
-        </form>
-      </AdminDropdownSection>
-
-      <AdminDropdownSection
-        persistKey="homepage-feature-cards"
-        title="Homepage Feature Cards"
-        description="Edit cards shown on Home under Homepage Highlights (not the popup modal)."
-      >
-        <form
-          action={createWelcomePost}
-          className="mt-4 grid gap-3 rounded-2xl border border-rose/15 bg-surface p-4 md:grid-cols-2"
-        >
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Title
-            </span>
-            <input
-              name="title"
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Sort Order
-            </span>
-            <input
-              name="sortOrder"
-              type="number"
-              defaultValue={10}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Body
-            </span>
-            <textarea
-              name="body"
-              rows={2}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              CTA Label
-            </span>
-            <input
-              name="ctaLabel"
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              CTA Link
-            </span>
-            <input
-              name="ctaHref"
-              defaultValue="/shop"
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm font-semibold">
-            <input type="checkbox" name="active" defaultChecked /> Active
-          </label>
-          <div className="md:col-span-2">
-            <button
-              type="submit"
-              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
-            >
-              Add Welcome Card
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 space-y-3">
-          {welcomePosts.map((post) => (
-            <article
-              key={post.id}
-              className="rounded-2xl border border-rose/20 bg-white p-4"
-            >
-              <form
-                action={updateWelcomePost}
-                className="grid gap-3 md:grid-cols-2"
+          <div className="grid gap-3 xl:grid-cols-3">
+          <details
+            data-admin-key="categories"
+            className="rounded-xl border border-gold/35 bg-amber-50/70 p-3 open:xl:col-span-3"
+          >
+            <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-amber-900">
+              <div>
+                <span>Categories</span>
+                <p className="mt-0.5 text-xs font-normal text-foreground/70">
+                  Category buckets only. Add inventory from Add Item or Product.
+                </p>
+              </div>
+              <span
+                aria-hidden="true"
+                className="admin-expand-caret rounded-md bg-gold/20 px-2 py-0.5 text-[11px] font-semibold text-amber-900"
               >
-                <input type="hidden" name="postId" value={post.id} />
+                &#9662;
+              </span>
+            </summary>
+            <p className="rounded-lg border border-gold/25 bg-white/70 px-3 py-2 text-xs font-semibold text-amber-900">
+              Category setup only. Product cards are created in Add Item or Product,
+              where each item gets assigned to one category.
+            </p>
+            <details
+              id="category-create"
+              data-admin-key="category-create"
+              className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3"
+            >
+              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-forest">
+                <span>Add Category</span>
+                <span
+                  aria-hidden="true"
+                  className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                >
+                  &#9662;
+                </span>
+              </summary>
+              <form
+                action={createCategory}
+                className="mt-3 grid gap-3 md:grid-cols-2"
+              >
+                <input
+                  type="hidden"
+                  name="redirectTo"
+                  value="/admin#category-create"
+                />
                 <label className="space-y-1">
                   <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Title
+                    Name
                   </span>
                   <input
-                    name="title"
-                    defaultValue={post.title}
+                    name="name"
                     className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
                   />
                 </label>
@@ -1384,373 +1249,974 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   <input
                     name="sortOrder"
                     type="number"
-                    defaultValue={post.sort_order}
+                    defaultValue={100}
                     className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
                   />
                 </label>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Body
-                  </span>
-                  <textarea
-                    name="body"
-                    rows={2}
-                    defaultValue={post.body}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    CTA Label
-                  </span>
-                  <input
-                    name="ctaLabel"
-                    defaultValue={post.cta_label ?? ""}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    CTA Link
-                  </span>
-                  <input
-                    name="ctaHref"
-                    defaultValue={post.cta_href ?? ""}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
+                <AdminImageUploadField
+                  name="imageUrl"
+                  className="md:col-span-2"
+                  recommendedSize="1200 x 800 px"
+                  helperText="Optional category image. This image URL is stored on the category record."
+                />
                 <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <input
-                    type="checkbox"
-                    name="active"
-                    defaultChecked={post.active}
-                  />{" "}
-                  Active
+                  <input type="checkbox" name="active" defaultChecked /> Active
                 </label>
                 <div className="md:col-span-2">
                   <button
                     type="submit"
                     className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Save Card
+                    Add Category
                   </button>
                 </div>
               </form>
-              <form action={deleteWelcomePost} className="mt-2">
-                <input type="hidden" name="postId" value={post.id} />
-                <button
-                  type="submit"
-                  className="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+            </details>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {categories.map((category) => (
+              <details
+                  key={category.id}
+                  id={`category-${category.id}`}
+                  data-admin-key={`category-${category.id}`}
+                  className="rounded-xl border border-rose/20 bg-white/95 p-3"
                 >
-                  Delete Card
-                </button>
-              </form>
-            </article>
-          ))}
-        </div>
-      </AdminDropdownSection>
+                  <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-forest">
+                        {category.name}
+                      </p>
+                      <p className="text-xs text-foreground/70">
+                        /{category.slug} | Sort {category.sort_order}
+                      </p>
+                      <p className="text-xs font-semibold text-foreground/65">
+                        {productCountByCategoryId.get(category.id) ?? 0} item
+                        {(productCountByCategoryId.get(category.id) ?? 0) === 1
+                          ? ""
+                          : "s"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${category.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}
+                      >
+                        {category.active ? "Active" : "Hidden"}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                      >
+                        &#9662;
+                      </span>
+                    </div>
+                  </summary>
 
-      <AdminDropdownSection
-        id="upload-transfer-pricing"
-        persistKey="upload-transfer-pricing"
-        title="Upload Transfer Pricing"
-        description="Edit custom upload transfer names, descriptions, pricing, and availability."
-      >
-        <form
-          action={createUploadTransferOption}
-          className="mt-4 grid gap-3 rounded-2xl border border-rose/20 bg-white p-4 md:grid-cols-2"
-        >
-          <input
-            type="hidden"
-            name="redirectTo"
-            value="/admin#upload-transfer-pricing"
-          />
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              New Option Name
-            </span>
-            <input
-              name="name"
-              placeholder="Custom Transfer"
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Price (USD)
-            </span>
-            <input
-              name="amountCents"
-              type="number"
-              min={1}
-              step={0.01}
-              defaultValue="25.00"
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Description
-            </span>
-            <textarea
-              name="description"
-              rows={2}
-              placeholder="Describe this transfer option."
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Sort Order
-            </span>
-            <input
-              name="sortOrder"
-              type="number"
-              defaultValue={100}
-              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
-            <input type="checkbox" name="active" defaultChecked />
-            Option active
-          </label>
-          <div className="md:col-span-2">
-            <button
-              type="submit"
-              className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
-            >
-              Add Custom Transfer
-            </button>
+                  <form
+                    action={updateCategory}
+                    className="mt-3 grid gap-3 md:grid-cols-2"
+                  >
+                    <input type="hidden" name="categoryId" value={category.id} />
+                    <input
+                      type="hidden"
+                      name="redirectTo"
+                      value={`/admin#category-${category.id}`}
+                    />
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                        Name
+                      </span>
+                      <input
+                        name="name"
+                        defaultValue={category.name}
+                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                        Slug
+                      </span>
+                      <input
+                        name="slug"
+                        defaultValue={category.slug}
+                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                        Sort Order
+                      </span>
+                      <input
+                        name="sortOrder"
+                        type="number"
+                        defaultValue={category.sort_order}
+                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+                      <input
+                        type="checkbox"
+                        name="active"
+                        defaultChecked={category.active}
+                      />{" "}
+                      Active
+                    </label>
+                    <AdminImageUploadField
+                      name="imageUrl"
+                      defaultValue={category.image_url ?? ""}
+                      className="md:col-span-2"
+                      recommendedSize="1200 x 800 px"
+                      helperText="Optional category image. Upload a new one to replace the current URL."
+                    />
+                    <div className="md:col-span-2">
+                      <AdminCategorySaveButton
+                        categoryName={category.name}
+                        initiallyActive={category.active}
+                        itemCount={productCountByCategoryId.get(category.id) ?? 0}
+                      />
+                    </div>
+                  </form>
+
+                  <form action={deleteCategory} className="mt-2">
+                    <input type="hidden" name="categoryId" value={category.id} />
+                    <input
+                      type="hidden"
+                      name="redirectTo"
+                      value={`/admin#category-${category.id}`}
+                    />
+                    <AdminConfirmSubmitButton
+                      buttonLabel="Delete Category (Keep Items)"
+                      confirmMessage="Are you sure you'd like to delete this category? Items will be kept and moved to Uncategorized."
+                      idleClassName="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+                    />
+                  </form>
+              </details>
+            ))}
           </div>
-        </form>
+          </details>
 
-        <form action={saveUploadTransferPricing} className="mt-4 space-y-3">
-          <input
-            type="hidden"
-            name="redirectTo"
-            value="/admin#upload-transfer-pricing"
-          />
-          {uploadOptions.map((option: ProductOptionAdminRow) => (
-            <article
-              key={option.id}
-              className="rounded-2xl border border-rose/20 bg-white p-4"
+          <details
+            id="product-create"
+            data-admin-key="product-create"
+            className="rounded-xl border border-lime-300/60 bg-lime-50/70 p-3 open:xl:col-span-3"
+          >
+            <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-lime-900">
+              <div>
+                <span>Add Item or Product</span>
+                <p className="mt-0.5 text-xs font-normal text-foreground/70">
+                  Create a new inventory card and assign its category.
+                </p>
+              </div>
+              <span
+                aria-hidden="true"
+                className="admin-expand-caret rounded-md bg-lime-200/70 px-2 py-0.5 text-[11px] font-semibold text-lime-900"
+              >
+                &#9662;
+              </span>
+            </summary>
+            <form
+              action={createProduct}
+              className="mt-3 grid gap-3 md:grid-cols-2"
             >
-              <input type="hidden" name="optionIds" value={option.id} />
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                {option.id}
-              </p>
-              <div className="mt-2 grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Sort Order
-                  </span>
-                  <input
-                    name={`sortOrder_${option.id}`}
-                    type="number"
-                    defaultValue={option.sortOrder}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Name
-                  </span>
-                  <input
-                    name={`name_${option.id}`}
-                    defaultValue={option.name}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Price (USD)
-                  </span>
-                  <input
-                    name={`amountCents_${option.id}`}
-                    type="number"
-                    min={1}
-                    step={0.01}
-                    defaultValue={formatUsdInput(option.amountCents)}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Description
-                  </span>
-                  <textarea
-                    name={`description_${option.id}`}
-                    rows={2}
-                    defaultValue={option.description}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
+              <input
+                type="hidden"
+                name="redirectTo"
+                value="/admin#product-create"
+              />
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Category For This Product
+                </span>
+                <select
+                  name="categoryId"
+                  required
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                >
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-foreground/65">
+                  This decides which category bucket the new product appears in.
+                </p>
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Title
+                </span>
+                <input
+                  name="title"
+                  required
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  SKU (optional override)
+                </span>
+                <input
+                  name="sku"
+                  placeholder="Leave blank to auto-generate from category"
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1 md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Description
+                </span>
+                <textarea
+                  name="description"
+                  required
+                  rows={2}
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <AdminImageUploadField
+                name="imageUrl"
+                defaultValue="/assets/img/product-tee.svg"
+                className="md:col-span-2"
+                recommendedSize="1200 x 1200 px"
+                helperText="Drag and drop a product image, or click Choose Image to upload."
+              />
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Price (USD)
+                </span>
+                <input
+                  name="priceCents"
+                  required
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  defaultValue="25.00"
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Stock
+                </span>
+                <input
+                  name="stockOnHand"
+                  required
+                  type="number"
+                  defaultValue={25}
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Sale Percent Off
+                </span>
+                <input
+                  name="salePercentOff"
+                  type="number"
+                  min={0}
+                  max={90}
+                  defaultValue={0}
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Sale Label
+                </span>
+                <input
+                  name="saleLabel"
+                  required
+                  defaultValue="Sale"
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1 md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Cart Button Text
+                </span>
+                <input
+                  name="cartCtaText"
+                  required
+                  defaultValue="Add to Cart"
+                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                />
+              </label>
+              <AdminNewProductTemplateFields templates={variantTemplates} />
+              <div className="flex flex-wrap gap-4 md:col-span-2">
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" name="isFeatured" /> Featured
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <input
-                    type="checkbox"
-                    name={`active_${option.id}`}
-                    defaultChecked={option.active}
-                  />
-                  Option active
+                  <input type="checkbox" name="isHot" /> Hot Item
                 </label>
-                {option.id.startsWith("custom-") ? (
-                  <div className="flex items-center justify-between gap-2 md:col-span-2">
-                    <p className="text-xs font-semibold text-foreground/70">
-                      Custom option
-                    </p>
-                    <button
-                      type="submit"
-                      name="optionId"
-                      value={option.id}
-                      formAction={deleteUploadTransferOption}
-                      className="rounded-lg border border-rose/35 px-3 py-1.5 text-xs font-semibold text-rose hover:bg-rose/10"
-                    >
-                      Delete option
-                    </button>
-                  </div>
-                ) : null}
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" name="saleEnabled" /> Sale On
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" name="active" defaultChecked /> Active
+                </label>
               </div>
-            </article>
-          ))}
-          <div>
-            <button
-              type="submit"
-              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
-            >
-              Save Transfer Pricing
-            </button>
+              <div className="md:col-span-2">
+                <button
+                  type="submit"
+                  className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Add Product
+                </button>
+              </div>
+            </form>
+          </details>
+
+          <details
+            id="bundle-maker"
+            data-admin-key="bundle-maker"
+            className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 open:xl:col-span-3"
+          >
+            <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-sky-950">
+              <div>
+                <span>Bundle Maker</span>
+                <p className="mt-0.5 text-xs font-normal text-foreground/70">
+                  Build a bundle listing from existing inventory.
+                </p>
+              </div>
+              <span
+                aria-hidden="true"
+                className="admin-expand-caret rounded-md bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-950"
+              >
+                &#9662;
+              </span>
+            </summary>
+            <p className="mt-2 text-xs text-foreground/75">
+              Create a bundle listing fast. This makes a real product card in the
+              Bundles category, so it can be featured in the popup and shop right
+              away. Component-level bundle inventory comes next.
+            </p>
+            <AdminBundleMaker
+              action={createBundleProduct}
+              products={products}
+              variants={productVariants}
+            />
+          </details>
           </div>
-        </form>
-      </AdminDropdownSection>
 
-      <AdminDropdownSection
-        persistKey="best-sellers"
-        title="Best Sellers (Internal Tracking)"
-        description="Top sellers based on paid cart orders recorded in your inventory movement logs."
-      >
-        {bestSellerRows.length === 0 ? (
-          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm text-foreground/75">
-            No paid cart sales recorded yet. As paid orders come in, this list
-            will populate automatically.
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded-2xl border border-rose/20 bg-white">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-surface">
-                <tr>
-                  <th className="px-4 py-3 font-semibold text-forest">
-                    Product
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-forest">SKU</th>
-                  <th className="px-4 py-3 font-semibold text-forest">
-                    Units Sold
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-forest">
-                    Paid Orders
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {bestSellerRows.map((row) => (
-                  <tr key={row.productId} className="border-t border-rose/15">
-                    <td className="px-4 py-3">{row.title}</td>
-                    <td className="px-4 py-3">{row.sku}</td>
-                    <td className="px-4 py-3 font-semibold text-forest">
-                      {row.unitsSold}
-                    </td>
-                    <td className="px-4 py-3">{row.orderCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </AdminDropdownSection>
+          <details
+            id="active-inventory-quick-view"
+            data-admin-key="active-inventory-quick-view"
+            className="mt-3 rounded-xl border border-forest/20 bg-white/85 p-3"
+          >
+            <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-forest">
+              <div>
+                <span>Active Inventory Quick View</span>
+                <p className="mt-0.5 text-xs font-normal text-foreground/70">
+                  Open this when you need to review or edit existing inventory
+                  by category.
+                </p>
+              </div>
+              <span
+                aria-hidden="true"
+                className="admin-expand-caret rounded-md bg-forest/10 px-2 py-0.5 text-[11px] font-semibold text-forest"
+              >
+                &#9662;
+              </span>
+            </summary>
 
-      <AdminDropdownSection
-        persistKey="funnel-analytics"
-        title="Funnel Analytics (Last 30 Days)"
-        description="Basic storefront funnel counts for product views, add-to-cart, checkout starts, and paid orders."
-      >
-        <div className="grid gap-3 md:grid-cols-4">
-          <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              View Product
-            </p>
-            <p className="mt-1 text-2xl font-bold text-forest">
-              {funnelSummary.counts.view_product}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Add to Cart
-            </p>
-            <p className="mt-1 text-2xl font-bold text-forest">
-              {funnelSummary.counts.add_to_cart}
-            </p>
-            <p className="mt-1 text-xs text-foreground/70">
-              {funnelSummary.addRate} from views
-            </p>
-          </article>
-          <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Start Checkout
-            </p>
-            <p className="mt-1 text-2xl font-bold text-forest">
-              {funnelSummary.counts.start_checkout}
-            </p>
-            <p className="mt-1 text-xs text-foreground/70">
-              {funnelSummary.checkoutRate} from add-to-cart
-            </p>
-          </article>
-          <article className="rounded-2xl border border-rose/20 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-              Paid
-            </p>
-            <p className="mt-1 text-2xl font-bold text-forest">
-              {funnelSummary.counts.paid}
-            </p>
-            <p className="mt-1 text-xs text-foreground/70">
-              {funnelSummary.paidRate} from checkout starts
-            </p>
-          </article>
-        </div>
-      </AdminDropdownSection>
+            <div className="mt-3 space-y-2">
+              {inventoryGroups.map((group) => (
+                <details
+                  key={group.id}
+                  id={`inventory-group-${group.id}`}
+                  data-admin-key={`inventory-group-${group.id}`}
+                  className="rounded-xl border border-rose/20 bg-white/95 p-3"
+                >
+                <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-forest">
+                      {group.label}
+                    </p>
+                    <p className="text-xs text-foreground/70">
+                      {group.items.length} item
+                      {group.items.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <span
+                    aria-hidden="true"
+                    className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                  >
+                    &#9662;
+                  </span>
+                </summary>
 
-      <AdminDropdownSection
-        persistKey="categories"
-        title="Categories"
-        description="Keep this compact by editing categories in dropdown rows."
-      >
-        <details
-          id="category-create"
-          data-admin-key="category-create"
-          className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3"
+                {group.items.length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-dashed border-rose/30 bg-rose/5 px-3 py-2 text-sm text-foreground/75">
+                    No products in this category yet.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {group.items.map((product) => {
+                      const productVariantsForProduct =
+                        variantsByProductId.get(product.id) ?? [];
+
+                      return (
+                        <details
+                          key={product.id}
+                          id={`product-${product.id}`}
+                          data-admin-key={`product-${product.id}`}
+                          className="rounded-xl border border-rose/20 bg-white p-3"
+                        >
+                          <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-forest">
+                                {product.title}
+                              </p>
+                              <p className="text-xs text-foreground/70">
+                                {formatUsd(product.price_cents)} | Stock{" "}
+                                {product.stock_on_hand}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1 text-[11px] font-semibold">
+                              <span
+                                className={`rounded-full px-2 py-0.5 ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}
+                              >
+                                {product.active ? "Active" : "Hidden"}
+                              </span>
+                              {product.is_featured ? (
+                                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                                  Featured
+                                </span>
+                              ) : null}
+                              {product.is_hot ? (
+                                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700">
+                                  Hot
+                                </span>
+                              ) : null}
+                              <span
+                                aria-hidden="true"
+                                className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                              >
+                                &#9662;
+                              </span>
+                            </div>
+                          </summary>
+
+                          <div className="mt-2 flex justify-end">
+                            <ShareProductButton
+                              path={`/shop/${product.slug}`}
+                              title={product.title}
+                              label="Share Item Link"
+                              className="rounded-xl border border-forest/20 bg-white px-3 py-1.5 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
+                            />
+                          </div>
+
+                          <form
+                            action={updateProductCard}
+                            className="mt-3 grid gap-3 md:grid-cols-2"
+                          >
+                            <input
+                              type="hidden"
+                              name="productId"
+                              value={product.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="redirectTo"
+                              value={`/admin#product-${product.id}`}
+                            />
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Title
+                              </span>
+                              <input
+                                name="title"
+                                defaultValue={product.title}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Category
+                              </span>
+                              <select
+                                name="categoryId"
+                                defaultValue={product.category_id}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              >
+                                {categories.map((category) => (
+                                  <option key={category.id} value={category.id}>
+                                    {category.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                SKU
+                              </span>
+                              <input
+                                name="sku"
+                                defaultValue={product.sku}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Slug
+                              </span>
+                              <input
+                                name="slug"
+                                defaultValue={product.slug}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <label className="space-y-1 md:col-span-2">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Description
+                              </span>
+                              <textarea
+                                name="description"
+                                rows={2}
+                                defaultValue={product.description}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <AdminImageUploadField
+                              name="imageUrl"
+                              defaultValue={product.image_url ?? ""}
+                              className="md:col-span-2"
+                              recommendedSize="1200 x 1200 px"
+                              helperText="Drop a replacement image here or upload one, then save this card."
+                            />
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Price (USD)
+                              </span>
+                              <input
+                                name="priceCents"
+                                type="number"
+                                min={0.01}
+                                step={0.01}
+                                defaultValue={formatUsdInput(product.price_cents)}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Stock
+                              </span>
+                              <input
+                                name="stockOnHand"
+                                type="number"
+                                defaultValue={product.stock_on_hand}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <p className="md:col-span-2 text-[11px] text-foreground/70">
+                              Note: Variant price overrides can override base
+                              product price on storefront.
+                            </p>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Sale Percent Off
+                              </span>
+                              <input
+                                name="salePercentOff"
+                                type="number"
+                                min={0}
+                                max={90}
+                                defaultValue={product.sale_percent_off}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Sale Label
+                              </span>
+                              <input
+                                name="saleLabel"
+                                defaultValue={product.sale_label}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <label className="space-y-1 md:col-span-2">
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                                Cart Button Text
+                              </span>
+                              <input
+                                name="cartCtaText"
+                                defaultValue={product.cart_cta_text}
+                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <div className="flex flex-wrap gap-4 md:col-span-2">
+                              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <input
+                                  type="checkbox"
+                                  name="isFeatured"
+                                  defaultChecked={product.is_featured}
+                                />{" "}
+                                Featured
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <input
+                                  type="checkbox"
+                                  name="isHot"
+                                  defaultChecked={product.is_hot}
+                                />{" "}
+                                Hot Item
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <input
+                                  type="checkbox"
+                                  name="saleEnabled"
+                                  defaultChecked={product.sale_enabled}
+                                />{" "}
+                                Sale On
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <input
+                                  type="checkbox"
+                                  name="active"
+                                  defaultChecked={product.active}
+                                />{" "}
+                                Active
+                              </label>
+                            </div>
+                            <div className="md:col-span-2 flex items-center justify-between">
+                              <p className="text-xs text-foreground/70">
+                                Price preview:{" "}
+                                <span className="font-semibold text-forest">
+                                  {formatUsd(product.price_cents)}
+                                </span>
+                              </p>
+                              <button
+                                type="submit"
+                                className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+                              >
+                                Save Product
+                              </button>
+                            </div>
+                          </form>
+
+                          <div className="mt-3 rounded-xl border border-rose/20 bg-surface/60 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                              Variant Inventory (Size/Color)
+                            </p>
+                            <p className="mt-1 text-xs text-foreground/75">
+                              Add and maintain stock by size/color here. If
+                              variants exist, checkout uses variant stock.
+                            </p>
+
+                            <AdminVariantTemplatePanel
+                              productId={product.id}
+                              templates={variantTemplates}
+                              createTemplateAction={createVariantTemplate}
+                              applyTemplateAction={applyVariantTemplate}
+                            />
+
+                            <form
+                              action={createProductVariant}
+                              className="mt-3 grid gap-2 md:grid-cols-3"
+                            >
+                              <input
+                                type="hidden"
+                                name="productId"
+                                value={product.id}
+                              />
+                              <input
+                                type="hidden"
+                                name="redirectTo"
+                                value={`/admin#product-${product.id}`}
+                              />
+                              <AdminVariantSizeField />
+                              <label className="space-y-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                  Color
+                                </span>
+                                <input
+                                  name="colorValue"
+                                  placeholder="Black, Red"
+                                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                  Brand
+                                </span>
+                                <input
+                                  name="brandName"
+                                  placeholder="Gildan Softstyle"
+                                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                  Variant SKU
+                                </span>
+                                <input
+                                  name="sku"
+                                  placeholder="WR-TSHIRT-BLK-M"
+                                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                  Price Override (USD)
+                                </span>
+                                <input
+                                  name="priceOverrideCents"
+                                  type="number"
+                                  min={0.01}
+                                  step={0.01}
+                                  placeholder="Optional (e.g. 22.00)"
+                                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                  Stock
+                                </span>
+                                <input
+                                  name="stockOnHand"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={0}
+                                  className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                />
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+                                <input
+                                  type="checkbox"
+                                  name="active"
+                                  defaultChecked
+                                />
+                                Active
+                              </label>
+                              <div className="md:col-span-3">
+                                <button
+                                  type="submit"
+                                  className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
+                                >
+                                  Add Variant
+                                </button>
+                              </div>
+                            </form>
+
+                            {productVariantsForProduct.length === 0 ? (
+                              <p className="mt-3 rounded-xl border border-dashed border-rose/30 bg-white/80 px-3 py-2 text-xs text-foreground/75">
+                                No variants yet for this product.
+                              </p>
+                            ) : (
+                              <div className="mt-3 space-y-2">
+                                {productVariantsForProduct.map((variant) => (
+                                  <article
+                                    key={variant.id}
+                                    className="rounded-xl border border-rose/15 bg-white p-3"
+                                  >
+                                    <p className="text-xs font-semibold text-forest">
+                                      {formatVariantLabel(variant)}
+                                    </p>
+                                    <form
+                                      action={updateProductVariant}
+                                      className="mt-2 grid gap-2 md:grid-cols-3"
+                                    >
+                                      <input
+                                        type="hidden"
+                                        name="variantId"
+                                        value={variant.id}
+                                      />
+                                      <input
+                                        type="hidden"
+                                        name="productId"
+                                        value={product.id}
+                                      />
+                                      <input
+                                        type="hidden"
+                                        name="redirectTo"
+                                        value={`/admin#product-${product.id}`}
+                                      />
+                                      <AdminVariantSizeField
+                                        defaultValue={variant.size_value}
+                                      />
+                                      <label className="space-y-1">
+                                        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                          Color
+                                        </span>
+                                        <input
+                                          name="colorValue"
+                                          defaultValue={variant.color_value ?? ""}
+                                          className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                        />
+                                      </label>
+                                      <label className="space-y-1">
+                                        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                          Brand
+                                        </span>
+                                        <input
+                                          name="brandName"
+                                          defaultValue={variant.brand_name ?? ""}
+                                          className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                        />
+                                      </label>
+                                      <label className="space-y-1">
+                                        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                          Variant SKU
+                                        </span>
+                                        <input
+                                          name="sku"
+                                          defaultValue={variant.sku ?? ""}
+                                          className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                        />
+                                      </label>
+                                      <label className="space-y-1">
+                                        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                          Price Override (USD)
+                                        </span>
+                                        <input
+                                          name="priceOverrideCents"
+                                          type="number"
+                                          min={0.01}
+                                          step={0.01}
+                                          defaultValue={
+                                            variant.price_override_cents != null
+                                              ? formatUsdInput(
+                                                  variant.price_override_cents,
+                                                )
+                                              : ""
+                                          }
+                                          className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                        />
+                                      </label>
+                                      <label className="space-y-1">
+                                        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
+                                          Stock
+                                        </span>
+                                        <input
+                                          name="stockOnHand"
+                                          type="number"
+                                          min={0}
+                                          defaultValue={variant.stock_on_hand}
+                                          className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                                        />
+                                      </label>
+                                      <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+                                        <input
+                                          type="checkbox"
+                                          name="active"
+                                          defaultChecked={variant.active}
+                                        />
+                                        Active
+                                      </label>
+                                      <div className="md:col-span-3">
+                                        <button
+                                          type="submit"
+                                          className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
+                                        >
+                                          Save Variant
+                                        </button>
+                                      </div>
+                                    </form>
+                                    <form
+                                      action={deleteProductVariant}
+                                      className="mt-2"
+                                    >
+                                      <input
+                                        type="hidden"
+                                        name="variantId"
+                                        value={variant.id}
+                                      />
+                                      <input
+                                        type="hidden"
+                                        name="redirectTo"
+                                        value={`/admin#product-${product.id}`}
+                                      />
+                                      <AdminConfirmSubmitButton
+                                        buttonLabel="Delete Variant"
+                                        confirmMessage="Are you sure you'd like to delete this variant?"
+                                        idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                      />
+                                    </form>
+                                  </article>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <form
+                            action={deleteProductCard}
+                            className="mt-2 flex justify-end"
+                          >
+                            <input
+                              type="hidden"
+                              name="productId"
+                              value={product.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="redirectTo"
+                              value={`/admin#inventory-group-${group.id}`}
+                            />
+                            <AdminConfirmSubmitButton
+                              buttonLabel="Delete Product"
+                              confirmMessage="Are you sure you'd like to delete this item?"
+                              idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                            />
+                          </form>
+                        </details>
+                      );
+                    })}
+                  </div>
+                )}
+                </details>
+              ))}
+            </div>
+          </details>
+        </AdminDropdownSection>
+
+        <AdminDropdownSection
+          id="upload-transfer-pricing"
+          persistKey="upload-transfer-pricing"
+          title="Upload Transfer Pricing"
+          description="Edit custom upload transfer names, descriptions, pricing, and availability."
+          tone="blue"
         >
-          <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-forest">
-            <span>Add Category</span>
-            <span
-              aria-hidden="true"
-              className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
-            >
-              &#9662;
-            </span>
-          </summary>
           <form
-            action={createCategory}
-            className="mt-3 grid gap-3 md:grid-cols-2"
+            action={createUploadTransferOption}
+            className="mt-4 grid gap-3 rounded-2xl border border-rose/20 bg-white p-4 md:grid-cols-2"
           >
             <input
               type="hidden"
               name="redirectTo"
-              value="/admin#category-create"
+              value="/admin#upload-transfer-pricing"
             />
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Name
+                New Option Name
               </span>
               <input
                 name="name"
+                placeholder="Custom Transfer"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Price (USD)
+              </span>
+              <input
+                name="amountCents"
+                type="number"
+                min={1}
+                step={0.01}
+                defaultValue="25.00"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Description
+              </span>
+              <textarea
+                name="description"
+                rows={2}
+                placeholder="Describe this transfer option."
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
@@ -1765,204 +2231,586 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
-            <AdminImageUploadField
-              name="imageUrl"
-              className="md:col-span-2"
-              recommendedSize="1200 x 800 px"
-              helperText="Optional category image. This image URL is stored on the category record."
-            />
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input type="checkbox" name="active" defaultChecked /> Active
+            <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
+              <input type="checkbox" name="active" defaultChecked />
+              Option active
             </label>
             <div className="md:col-span-2">
               <button
                 type="submit"
-                className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
               >
-                Add Category
+                Add Custom Transfer
               </button>
             </div>
           </form>
-        </details>
 
-        <div className="mt-3 space-y-2">
-          {categories.map((category) => (
-            <details
-              key={category.id}
-              id={`category-${category.id}`}
-              data-admin-key={`category-${category.id}`}
-              className="rounded-xl border border-rose/20 bg-white/95 p-3"
-            >
-              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-forest">
-                    {category.name}
-                  </p>
-                  <p className="text-xs text-foreground/70">
-                    /{category.slug} | Sort {category.sort_order}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${category.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}
-                  >
-                    {category.active ? "Active" : "Hidden"}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
-                  >
-                    &#9662;
-                  </span>
-                </div>
-              </summary>
-
-              <form
-                action={updateCategory}
-                className="mt-3 grid gap-3 md:grid-cols-2"
-              >
-                <input type="hidden" name="categoryId" value={category.id} />
-                <input
-                  type="hidden"
-                  name="redirectTo"
-                  value={`/admin#category-${category.id}`}
-                />
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Name
-                  </span>
-                  <input
-                    name="name"
-                    defaultValue={category.name}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Slug
-                  </span>
-                  <input
-                    name="slug"
-                    defaultValue={category.slug}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                    Sort Order
-                  </span>
-                  <input
-                    name="sortOrder"
-                    type="number"
-                    defaultValue={category.sort_order}
-                    className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
-                  <input
-                    type="checkbox"
-                    name="active"
-                    defaultChecked={category.active}
-                  />{" "}
-                  Active
-                </label>
-                <AdminImageUploadField
-                  name="imageUrl"
-                  defaultValue={category.image_url ?? ""}
-                  className="md:col-span-2"
-                  recommendedSize="1200 x 800 px"
-                  helperText="Optional category image. Upload a new one to replace the current URL."
-                />
-                <div className="md:col-span-2">
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Save Category
-                  </button>
-                </div>
-              </form>
-
-              <form action={deleteCategory} className="mt-2">
-                <input type="hidden" name="categoryId" value={category.id} />
-                <input
-                  type="hidden"
-                  name="redirectTo"
-                  value={`/admin#category-${category.id}`}
-                />
-                <AdminConfirmSubmitButton
-                  buttonLabel="Delete Category (Keep Items)"
-                  confirmMessage="Are you sure you'd like to delete this category? Items will be kept and moved to Uncategorized."
-                  idleClassName="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-                />
-              </form>
-            </details>
-          ))}
-        </div>
-      </AdminDropdownSection>
-
-      <AdminDropdownSection
-        id="product-inventory"
-        persistKey="product-inventory"
-        title="Product Inventory"
-        description="Product cards are collapsed by default to keep the backend concise and scannable."
-      >
-        <details
-          id="product-create"
-          data-admin-key="product-create"
-          className="mt-4 rounded-xl border border-rose/20 bg-surface/70 p-3"
-        >
-          <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-forest">
-            <span>Add New Product Card</span>
-            <span
-              aria-hidden="true"
-              className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
-            >
-              &#9662;
-            </span>
-          </summary>
-          <form
-            action={createProduct}
-            className="mt-3 grid gap-3 md:grid-cols-2"
-          >
+          <form action={saveUploadTransferPricing} className="mt-4 space-y-3">
             <input
               type="hidden"
               name="redirectTo"
-              value="/admin#product-create"
+              value="/admin#upload-transfer-pricing"
             />
+            {uploadOptions.map((option: ProductOptionAdminRow) => (
+              <article
+                key={option.id}
+                className="rounded-2xl border border-rose/20 bg-white p-4"
+              >
+                <input type="hidden" name="optionIds" value={option.id} />
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  {option.id}
+                </p>
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      Sort Order
+                    </span>
+                    <input
+                      name={`sortOrder_${option.id}`}
+                      type="number"
+                      defaultValue={option.sortOrder}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      Name
+                    </span>
+                    <input
+                      name={`name_${option.id}`}
+                      defaultValue={option.name}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      Price (USD)
+                    </span>
+                    <input
+                      name={`amountCents_${option.id}`}
+                      type="number"
+                      min={1}
+                      step={0.01}
+                      defaultValue={formatUsdInput(option.amountCents)}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1 md:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      Description
+                    </span>
+                    <textarea
+                      name={`description_${option.id}`}
+                      rows={2}
+                      defaultValue={option.description}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      name={`active_${option.id}`}
+                      defaultChecked={option.active}
+                    />
+                    Option active
+                  </label>
+                  {option.id.startsWith("custom-") ? (
+                    <div className="flex items-center justify-between gap-2 md:col-span-2">
+                      <p className="text-xs font-semibold text-foreground/70">
+                        Custom option
+                      </p>
+                      <button
+                        type="submit"
+                        name="optionId"
+                        value={option.id}
+                        formAction={deleteUploadTransferOption}
+                        className="rounded-lg border border-rose/35 px-3 py-1.5 text-xs font-semibold text-rose hover:bg-rose/10"
+                      >
+                        Delete option
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+            <div>
+              <button
+                type="submit"
+                className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+              >
+                Save Transfer Pricing
+              </button>
+            </div>
+          </form>
+        </AdminDropdownSection>
+
+        <AdminDropdownSection
+          persistKey="analytics"
+          title="Analytics"
+          description="Sales and storefront funnel reporting live here."
+          tone="gold"
+        >
+          <AdminDropdownSection
+            persistKey="best-sellers"
+            title="Best Sellers (Internal Tracking)"
+            description="Top sellers based on paid cart orders recorded in your inventory movement logs."
+            tone="rose"
+          >
+            {bestSellerRows.length === 0 ? (
+              <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm text-foreground/75">
+                No paid cart sales recorded yet. As paid orders come in, this list
+                will populate automatically.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-rose/20 bg-white">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-surface">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-forest">
+                        Product
+                      </th>
+                      <th className="px-4 py-3 font-semibold text-forest">SKU</th>
+                      <th className="px-4 py-3 font-semibold text-forest">
+                        Units Sold
+                      </th>
+                      <th className="px-4 py-3 font-semibold text-forest">
+                        Paid Orders
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bestSellerRows.map((row) => (
+                      <tr key={row.productId} className="border-t border-rose/15">
+                        <td className="px-4 py-3">{row.title}</td>
+                        <td className="px-4 py-3">{row.sku}</td>
+                        <td className="px-4 py-3 font-semibold text-forest">
+                          {row.unitsSold}
+                        </td>
+                        <td className="px-4 py-3">{row.orderCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </AdminDropdownSection>
+
+          <AdminDropdownSection
+            persistKey="funnel-analytics"
+            title="Funnel Analytics (Last 30 Days)"
+            description="Basic storefront funnel counts for product views, add-to-cart, checkout starts, and paid orders."
+            tone="blue"
+          >
+            <div className="grid gap-3 md:grid-cols-4">
+              <article className="rounded-2xl border border-rose/20 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  View Product
+                </p>
+                <p className="mt-1 text-2xl font-bold text-forest">
+                  {funnelSummary.counts.view_product}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-rose/20 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Add to Cart
+                </p>
+                <p className="mt-1 text-2xl font-bold text-forest">
+                  {funnelSummary.counts.add_to_cart}
+                </p>
+                <p className="mt-1 text-xs text-foreground/70">
+                  {funnelSummary.addRate} from views
+                </p>
+              </article>
+              <article className="rounded-2xl border border-rose/20 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Start Checkout
+                </p>
+                <p className="mt-1 text-2xl font-bold text-forest">
+                  {funnelSummary.counts.start_checkout}
+                </p>
+                <p className="mt-1 text-xs text-foreground/70">
+                  {funnelSummary.checkoutRate} from add-to-cart
+                </p>
+              </article>
+              <article className="rounded-2xl border border-rose/20 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                  Paid
+                </p>
+                <p className="mt-1 text-2xl font-bold text-forest">
+                  {funnelSummary.counts.paid}
+                </p>
+                <p className="mt-1 text-xs text-foreground/70">
+                  {funnelSummary.paidRate} from checkout starts
+                </p>
+              </article>
+            </div>
+          </AdminDropdownSection>
+        </AdminDropdownSection>
+
+        <AdminDropdownSection
+          id="orders-uploads"
+          persistKey="orders-uploads"
+          title="Orders and Uploads"
+          description="Review customer uploads, update fulfillment status, print labels, and clean up completed work."
+          tone="blue"
+        >
+          <div className="rounded-xl border border-sky-200 bg-white/90 p-4 shadow-sm">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-900">
+                  Current View
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-950">
+                    {orders.length} shown
+                  </span>
+                  <span className="rounded-md bg-white px-3 py-1 text-sm font-semibold capitalize text-foreground/75 ring-1 ring-sky-100">
+                    {orderView}
+                  </span>
+                </div>
+              </div>
+
+              <nav
+                aria-label="Order view filter"
+                className="grid gap-1 rounded-lg border border-sky-100 bg-sky-50/70 p-1 text-xs font-semibold sm:grid-cols-4"
+              >
+                <Link
+                  href={ordersViewHref("active")}
+                  className={`rounded-md px-3 py-2 text-center transition ${
+                    orderView === "active"
+                      ? "bg-white text-rose shadow-sm ring-1 ring-rose/20"
+                      : "text-foreground/70 hover:bg-white/70 hover:text-rose"
+                  }`}
+                >
+                  Active
+                </Link>
+                <Link
+                  href={ordersViewHref("archived")}
+                  className={`rounded-md px-3 py-2 text-center transition ${
+                    orderView === "archived"
+                      ? "bg-white text-rose shadow-sm ring-1 ring-rose/20"
+                      : "text-foreground/70 hover:bg-white/70 hover:text-rose"
+                  }`}
+                >
+                  Archived
+                </Link>
+                <Link
+                  href={ordersViewHref("fulfilled")}
+                  className={`rounded-md px-3 py-2 text-center transition ${
+                    orderView === "fulfilled"
+                      ? "bg-white text-rose shadow-sm ring-1 ring-rose/20"
+                      : "text-foreground/70 hover:bg-white/70 hover:text-rose"
+                  }`}
+                >
+                  Fulfilled Archive
+                </Link>
+                <Link
+                  href={ordersViewHref("all")}
+                  className={`rounded-md px-3 py-2 text-center transition ${
+                    orderView === "all"
+                      ? "bg-white text-rose shadow-sm ring-1 ring-rose/20"
+                      : "text-foreground/70 hover:bg-white/70 hover:text-rose"
+                  }`}
+                >
+                  All
+                </Link>
+              </nav>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900">
+                Order Cleanup
+              </p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <form action={archiveResolvedOrders} className="w-full">
+                  <input
+                    type="hidden"
+                    name="redirectTo"
+                    value={`${orderViewBasePath}#orders-uploads`}
+                  />
+                  <AdminConfirmSubmitButton
+                    buttonLabel="Archive Completed Orders"
+                    confirmMessage="Archive all fulfilled, completed, and cancelled orders from the active list?"
+                    idleClassName="w-full rounded-md border border-forest/30 bg-white px-4 py-2 text-sm font-semibold text-forest hover:bg-surface"
+                  />
+                </form>
+                <form action={clearArchivedOrders} className="w-full">
+                  <input
+                    type="hidden"
+                    name="redirectTo"
+                    value={`${orderViewBasePath}#orders-uploads`}
+                  />
+                  <AdminConfirmSubmitButton
+                    buttonLabel="Clear Archived Orders"
+                    confirmMessage="Permanently delete archived fulfilled/completed/cancelled orders? This cannot be undone."
+                    idleClassName="w-full rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+                  />
+                </form>
+              </div>
+            </div>
+          </div>
+          {orders.length === 0 ? (
+            <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
+              No orders in this view yet.
+            </p>
+          ) : null}
+          <div className="space-y-2">
+            {orders.map((order) => {
+              const parsedNotes = parseFulfillmentNotes(order.notes);
+              const orderNumber = formatOrderNumber(order.id, order.created_at);
+              const canPrintLabel = [
+                "paid",
+                "in_production",
+                "fulfilled",
+                "completed",
+              ].includes(order.status);
+
+              return (
+                <details
+                  key={order.id}
+                  id={`order-${order.id}`}
+                  data-admin-key={`order-${order.id}`}
+                  className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
+                >
+                  <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-forest">
+                        {order.customer_name} • {formatUsd(order.amount_cents)}
+                      </p>
+                      <p className="text-xs text-foreground/70">
+                        {order.customer_email} •{" "}
+                        {formatDateTime(order.created_at)}
+                      </p>
+                      <p className="text-[11px] font-semibold text-gold">
+                        Order #{orderNumber}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}
+                      >
+                        {formatOrderStatusLabel(order.status)}
+                      </span>
+                      {order.archived_at ? (
+                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-700">
+                          archived
+                        </span>
+                      ) : null}
+                      <span
+                        aria-hidden="true"
+                        className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
+                      >
+                        &#9662;
+                      </span>
+                    </div>
+                  </summary>
+
+                  <div className="mt-3 grid gap-4 xl:grid-cols-[1fr_auto] xl:items-start">
+                    <div className="space-y-2 text-sm">
+                      <p>
+                        <span className="font-semibold">Order #:</span>{" "}
+                        {orderNumber}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Phone:</span>{" "}
+                        {order.customer_phone ?? "N/A"}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Option:</span>{" "}
+                        {order.product_option}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Qty:</span>{" "}
+                        {order.quantity}
+                      </p>
+                      <p>
+                        <span className="font-semibold">File:</span>{" "}
+                        {order.design_path}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Placed:</span>{" "}
+                        {formatDateTime(order.created_at)}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Paid:</span>{" "}
+                        {formatDateTime(order.paid_at)}
+                      </p>
+                      {parsedNotes.fulfillmentMethod ? (
+                        <p>
+                          <span className="font-semibold">Fulfillment:</span>{" "}
+                          {parsedNotes.fulfillmentMethod}
+                        </p>
+                      ) : null}
+                      {order.archived_at ? (
+                        <p>
+                          <span className="font-semibold">Archived:</span>{" "}
+                          {formatDateTime(order.archived_at)}
+                        </p>
+                      ) : null}
+                      {parsedNotes.bodyNotes ? (
+                        <p>
+                          <span className="font-semibold">Notes:</span>{" "}
+                          {parsedNotes.bodyNotes}
+                        </p>
+                      ) : null}
+                      {parsedNotes.entries.length > 0 ? (
+                        <div className="rounded-xl border border-violet-200 bg-violet-50 p-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">
+                            Fulfillment Log
+                          </p>
+                          <div className="mt-1 space-y-1 text-xs text-violet-900">
+                            {parsedNotes.entries.map((entry, index) => (
+                              <p key={`${order.id}-fulfillment-${index}`}>
+                                [
+                                {entry.timestamp
+                                  ? formatDateTime(entry.timestamp)
+                                  : "No time"}
+                                ] {entry.text}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="space-y-3">
+                      {order.fileLink ? (
+                        <a
+                          href={order.fileLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex w-full justify-center rounded-md border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white sm:w-auto"
+                        >
+                          Download Upload
+                        </a>
+                      ) : (
+                        <p className="text-xs text-red-700">
+                          Upload link unavailable
+                        </p>
+                      )}
+                      {canPrintLabel ? (
+                        <PrintOrderLabelButton
+                          orderNumber={orderNumber}
+                          customerName={order.customer_name}
+                          customerEmail={order.customer_email}
+                          productOption={order.product_option}
+                          quantity={order.quantity}
+                          createdAt={order.created_at}
+                          businessAddress={siteContent.contact.address}
+                          businessEmail={siteContent.contact.email}
+                          businessPhone={siteContent.contact.phone}
+                          defaultThankYouNote={
+                            siteContent.contact.printLabelThankYouNote
+                          }
+                        />
+                      ) : null}
+                      <form
+                        action={updateOrderStatus}
+                        className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_auto] sm:items-center"
+                      >
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <input
+                          type="hidden"
+                          name="redirectTo"
+                          value={orderRedirectTo(order.id)}
+                        />
+                        <select
+                          name="status"
+                          title="Order status"
+                          aria-label="Order status"
+                          defaultValue={order.status}
+                          className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
+                        >
+                          {ORDER_STATUS_VALUES.map((status) => (
+                            <option key={status} value={status}>
+                              {formatOrderStatusLabel(status)}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          name="fulfillmentNote"
+                          placeholder="Fulfillment note (drop-off + time)"
+                          className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="w-full rounded-md bg-rose px-3 py-2 text-xs font-semibold text-white sm:w-auto"
+                        >
+                          Save
+                        </button>
+                      </form>
+                      {order.archived_at ? (
+                        <form action={unarchiveOrder} className="w-full sm:w-fit">
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input
+                            type="hidden"
+                            name="redirectTo"
+                            value={orderRedirectTo(order.id)}
+                          />
+                          <button
+                            type="submit"
+                            className="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface sm:w-auto"
+                          >
+                            Unarchive
+                          </button>
+                        </form>
+                      ) : isArchivableOrderStatus(order.status) ? (
+                        <form action={archiveOrder} className="w-full sm:w-fit">
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input
+                            type="hidden"
+                            name="redirectTo"
+                            value={orderRedirectTo(order.id)}
+                          />
+                          <AdminConfirmSubmitButton
+                            buttonLabel="Archive Order"
+                            confirmMessage="Archive this fulfilled/completed/cancelled order?"
+                            idleClassName="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface sm:w-auto"
+                          />
+                        </form>
+                      ) : null}
+                    </div>
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </AdminDropdownSection>
+      </AdminDropdownSection>
+
+      <AdminDropdownSection
+        id="content-management"
+        persistKey="content-management"
+        title="Content Management System"
+        description="Homepage copy, popup content, feature cards, and customer messages live here."
+        tone="rose"
+      >
+        <AdminDropdownSection
+          persistKey="homepage-hero"
+          title="Homepage Hero"
+          description="This controls the top-left copy block on the home page."
+          tone="sage"
+        >
+          <form
+            action={saveHomepageSettings}
+            className="mt-4 grid gap-3 md:grid-cols-2"
+          >
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Title
+                Badge
               </span>
               <input
-                name="title"
-                required
+                name="heroBadge"
+                defaultValue={homepage.hero_badge}
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Category
-              </span>
-              <select
-                name="categoryId"
-                required
-                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-              >
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                SKU (optional override)
+                Title
               </span>
               <input
-                name="sku"
-                placeholder="Leave blank to auto-generate from category"
+                name="heroTitle"
+                defaultValue={homepage.hero_title}
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
@@ -1971,861 +2819,422 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 Description
               </span>
               <textarea
-                name="description"
-                required
-                rows={2}
-                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-              />
-            </label>
-            <AdminImageUploadField
-              name="imageUrl"
-              defaultValue="/assets/img/product-tee.svg"
-              className="md:col-span-2"
-              recommendedSize="1200 x 1200 px"
-              helperText="Drag and drop a product image, or click Choose Image to upload."
-            />
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Price (USD)
-              </span>
-              <input
-                name="priceCents"
-                required
-                type="number"
-                min={0.01}
-                step={0.01}
-                defaultValue="25.00"
+                name="heroDescription"
+                rows={3}
+                defaultValue={homepage.hero_description}
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Stock
+                Primary CTA Label
               </span>
               <input
-                name="stockOnHand"
-                required
-                type="number"
-                defaultValue={25}
+                name="primaryCtaLabel"
+                defaultValue={homepage.primary_cta_label}
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Sale Percent Off
+                Primary CTA Link
               </span>
               <input
-                name="salePercentOff"
-                type="number"
-                min={0}
-                max={90}
-                defaultValue={0}
+                name="primaryCtaHref"
+                defaultValue={homepage.primary_cta_href}
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Sale Label
+                Secondary CTA Label
               </span>
               <input
-                name="saleLabel"
-                required
-                defaultValue="Sale"
+                name="secondaryCtaLabel"
+                defaultValue={homepage.secondary_cta_label}
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
-            <label className="space-y-1 md:col-span-2">
+            <label className="space-y-1">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                Cart Button Text
+                Secondary CTA Link
               </span>
               <input
-                name="cartCtaText"
-                required
-                defaultValue="Add to Cart"
+                name="secondaryCtaHref"
+                defaultValue={homepage.secondary_cta_href}
                 className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
               />
             </label>
-            <div className="flex flex-wrap gap-4 md:col-span-2">
-              <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                <input type="checkbox" name="isFeatured" /> Featured
-              </label>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                <input type="checkbox" name="isHot" /> Hot Item
-              </label>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                <input type="checkbox" name="saleEnabled" /> Sale On
-              </label>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                <input type="checkbox" name="active" defaultChecked /> Active
-              </label>
-            </div>
             <div className="md:col-span-2">
               <button
                 type="submit"
                 className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
               >
-                Add Product
+                Save Homepage Hero
               </button>
             </div>
           </form>
-        </details>
+        </AdminDropdownSection>
 
-        <div className="mt-3 space-y-2">
-          {inventoryGroups.map((group) => (
-            <details
-              key={group.id}
-              id={`inventory-group-${group.id}`}
-              data-admin-key={`inventory-group-${group.id}`}
-              className="rounded-xl border border-rose/20 bg-white/95 p-3"
-            >
-              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-forest">
-                    {group.label}
-                  </p>
-                  <p className="text-xs text-foreground/70">
-                    {group.items.length} item
-                    {group.items.length === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <span
-                  aria-hidden="true"
-                  className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
-                >
-                  &#9662;
-                </span>
-              </summary>
-
-              {group.items.length === 0 ? (
-                <p className="mt-3 rounded-xl border border-dashed border-rose/30 bg-rose/5 px-3 py-2 text-sm text-foreground/75">
-                  No products in this category yet.
-                </p>
-              ) : (
-                <div className="mt-3 space-y-2">
-                  {group.items.map((product) => {
-                    const productVariantsForProduct =
-                      variantsByProductId.get(product.id) ?? [];
-
-                    return (
-                      <details
-                        key={product.id}
-                        id={`product-${product.id}`}
-                        data-admin-key={`product-${product.id}`}
-                        className="rounded-xl border border-rose/20 bg-white p-3"
-                      >
-                        <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-forest">
-                              {product.title}
-                            </p>
-                            <p className="text-xs text-foreground/70">
-                              {formatUsd(product.price_cents)} | Stock{" "}
-                              {product.stock_on_hand}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1 text-[11px] font-semibold">
-                            <span
-                              className={`rounded-full px-2 py-0.5 ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}
-                            >
-                              {product.active ? "Active" : "Hidden"}
-                            </span>
-                            {product.is_featured ? (
-                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                                Featured
-                              </span>
-                            ) : null}
-                            {product.is_hot ? (
-                              <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700">
-                                Hot
-                              </span>
-                            ) : null}
-                            <span
-                              aria-hidden="true"
-                              className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
-                            >
-                              &#9662;
-                            </span>
-                          </div>
-                        </summary>
-
-                        <div className="mt-2 flex justify-end">
-                          <ShareProductButton
-                            path={`/shop/${product.slug}`}
-                            title={product.title}
-                            label="Share Item Link"
-                            className="rounded-xl border border-forest/20 bg-white px-3 py-1.5 text-xs font-semibold text-forest hover:bg-forest hover:text-white"
-                          />
-                        </div>
-
-                        <form
-                          action={updateProductCard}
-                          className="mt-3 grid gap-3 md:grid-cols-2"
-                        >
-                          <input
-                            type="hidden"
-                            name="productId"
-                            value={product.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="redirectTo"
-                            value={`/admin#product-${product.id}`}
-                          />
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Title
-                            </span>
-                            <input
-                              name="title"
-                              defaultValue={product.title}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Category
-                            </span>
-                            <select
-                              name="categoryId"
-                              defaultValue={product.category_id}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            >
-                              {categories.map((category) => (
-                                <option key={category.id} value={category.id}>
-                                  {category.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              SKU
-                            </span>
-                            <input
-                              name="sku"
-                              defaultValue={product.sku}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Slug
-                            </span>
-                            <input
-                              name="slug"
-                              defaultValue={product.slug}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <label className="space-y-1 md:col-span-2">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Description
-                            </span>
-                            <textarea
-                              name="description"
-                              rows={2}
-                              defaultValue={product.description}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <AdminImageUploadField
-                            name="imageUrl"
-                            defaultValue={product.image_url ?? ""}
-                            className="md:col-span-2"
-                            recommendedSize="1200 x 1200 px"
-                            helperText="Drop a replacement image here or upload one, then save this card."
-                          />
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Price (USD)
-                            </span>
-                            <input
-                              name="priceCents"
-                              type="number"
-                              min={0.01}
-                              step={0.01}
-                              defaultValue={formatUsdInput(product.price_cents)}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Stock
-                            </span>
-                            <input
-                              name="stockOnHand"
-                              type="number"
-                              defaultValue={product.stock_on_hand}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <p className="md:col-span-2 text-[11px] text-foreground/70">
-                            Note: Variant price overrides can override base
-                            product price on storefront.
-                          </p>
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Sale Percent Off
-                            </span>
-                            <input
-                              name="salePercentOff"
-                              type="number"
-                              min={0}
-                              max={90}
-                              defaultValue={product.sale_percent_off}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Sale Label
-                            </span>
-                            <input
-                              name="saleLabel"
-                              defaultValue={product.sale_label}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <label className="space-y-1 md:col-span-2">
-                            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                              Cart Button Text
-                            </span>
-                            <input
-                              name="cartCtaText"
-                              defaultValue={product.cart_cta_text}
-                              className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                            />
-                          </label>
-                          <div className="flex flex-wrap gap-4 md:col-span-2">
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                name="isFeatured"
-                                defaultChecked={product.is_featured}
-                              />{" "}
-                              Featured
-                            </label>
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                name="isHot"
-                                defaultChecked={product.is_hot}
-                              />{" "}
-                              Hot Item
-                            </label>
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                name="saleEnabled"
-                                defaultChecked={product.sale_enabled}
-                              />{" "}
-                              Sale On
-                            </label>
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                name="active"
-                                defaultChecked={product.active}
-                              />{" "}
-                              Active
-                            </label>
-                          </div>
-                          <div className="md:col-span-2 flex items-center justify-between">
-                            <p className="text-xs text-foreground/70">
-                              Price preview:{" "}
-                              <span className="font-semibold text-forest">
-                                {formatUsd(product.price_cents)}
-                              </span>
-                            </p>
-                            <button
-                              type="submit"
-                              className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
-                            >
-                              Save Product
-                            </button>
-                          </div>
-                        </form>
-
-                        <div className="mt-3 rounded-xl border border-rose/20 bg-surface/60 p-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
-                            Variant Inventory (Size/Color)
-                          </p>
-                          <p className="mt-1 text-xs text-foreground/75">
-                            Add and maintain stock by size/color here. If
-                            variants exist, checkout uses variant stock.
-                          </p>
-
-                          <form
-                            action={createProductVariant}
-                            className="mt-3 grid gap-2 md:grid-cols-3"
-                          >
-                            <input
-                              type="hidden"
-                              name="productId"
-                              value={product.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="redirectTo"
-                              value={`/admin#product-${product.id}`}
-                            />
-                            <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                Size
-                              </span>
-                              <input
-                                name="sizeValue"
-                                placeholder="S, M, L"
-                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                              />
-                            </label>
-                            <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                Color
-                              </span>
-                              <input
-                                name="colorValue"
-                                placeholder="Black, Red"
-                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                              />
-                            </label>
-                            <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                Variant SKU
-                              </span>
-                              <input
-                                name="sku"
-                                placeholder="WR-TSHIRT-BLK-M"
-                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                              />
-                            </label>
-                            <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                Price Override (USD)
-                              </span>
-                              <input
-                                name="priceOverrideCents"
-                                type="number"
-                                min={0.01}
-                                step={0.01}
-                                placeholder="Optional (e.g. 22.00)"
-                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                              />
-                            </label>
-                            <label className="space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                Stock
-                              </span>
-                              <input
-                                name="stockOnHand"
-                                type="number"
-                                min={0}
-                                defaultValue={0}
-                                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                              />
-                            </label>
-                            <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
-                              <input
-                                type="checkbox"
-                                name="active"
-                                defaultChecked
-                              />
-                              Active
-                            </label>
-                            <div className="md:col-span-3">
-                              <button
-                                type="submit"
-                                className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
-                              >
-                                Add Variant
-                              </button>
-                            </div>
-                          </form>
-
-                          {productVariantsForProduct.length === 0 ? (
-                            <p className="mt-3 rounded-xl border border-dashed border-rose/30 bg-white/80 px-3 py-2 text-xs text-foreground/75">
-                              No variants yet for this product.
-                            </p>
-                          ) : (
-                            <div className="mt-3 space-y-2">
-                              {productVariantsForProduct.map((variant) => (
-                                <article
-                                  key={variant.id}
-                                  className="rounded-xl border border-rose/15 bg-white p-3"
-                                >
-                                  <p className="text-xs font-semibold text-forest">
-                                    {formatVariantLabel(variant)}
-                                  </p>
-                                  <form
-                                    action={updateProductVariant}
-                                    className="mt-2 grid gap-2 md:grid-cols-3"
-                                  >
-                                    <input
-                                      type="hidden"
-                                      name="variantId"
-                                      value={variant.id}
-                                    />
-                                    <input
-                                      type="hidden"
-                                      name="productId"
-                                      value={product.id}
-                                    />
-                                    <input
-                                      type="hidden"
-                                      name="redirectTo"
-                                      value={`/admin#product-${product.id}`}
-                                    />
-                                    <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                        Size
-                                      </span>
-                                      <input
-                                        name="sizeValue"
-                                        defaultValue={variant.size_value ?? ""}
-                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                                      />
-                                    </label>
-                                    <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                        Color
-                                      </span>
-                                      <input
-                                        name="colorValue"
-                                        defaultValue={variant.color_value ?? ""}
-                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                                      />
-                                    </label>
-                                    <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                        Variant SKU
-                                      </span>
-                                      <input
-                                        name="sku"
-                                        defaultValue={variant.sku ?? ""}
-                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                                      />
-                                    </label>
-                                    <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                        Price Override (USD)
-                                      </span>
-                                      <input
-                                        name="priceOverrideCents"
-                                        type="number"
-                                        min={0.01}
-                                        step={0.01}
-                                        defaultValue={
-                                          variant.price_override_cents != null
-                                            ? formatUsdInput(
-                                                variant.price_override_cents,
-                                              )
-                                            : ""
-                                        }
-                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                                      />
-                                    </label>
-                                    <label className="space-y-1">
-                                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gold">
-                                        Stock
-                                      </span>
-                                      <input
-                                        name="stockOnHand"
-                                        type="number"
-                                        min={0}
-                                        defaultValue={variant.stock_on_hand}
-                                        className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
-                                      />
-                                    </label>
-                                    <label className="inline-flex items-center gap-2 text-sm font-semibold md:mt-7">
-                                      <input
-                                        type="checkbox"
-                                        name="active"
-                                        defaultChecked={variant.active}
-                                      />
-                                      Active
-                                    </label>
-                                    <div className="md:col-span-3">
-                                      <button
-                                        type="submit"
-                                        className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
-                                      >
-                                        Save Variant
-                                      </button>
-                                    </div>
-                                  </form>
-                                  <form
-                                    action={deleteProductVariant}
-                                    className="mt-2"
-                                  >
-                                    <input
-                                      type="hidden"
-                                      name="variantId"
-                                      value={variant.id}
-                                    />
-                                    <input
-                                      type="hidden"
-                                      name="redirectTo"
-                                      value={`/admin#product-${product.id}`}
-                                    />
-                                    <AdminConfirmSubmitButton
-                                      buttonLabel="Delete Variant"
-                                      confirmMessage="Are you sure you'd like to delete this variant?"
-                                      idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
-                                    />
-                                  </form>
-                                </article>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <form
-                          action={deleteProductCard}
-                          className="mt-2 flex justify-end"
-                        >
-                          <input
-                            type="hidden"
-                            name="productId"
-                            value={product.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="redirectTo"
-                            value={`/admin#inventory-group-${group.id}`}
-                          />
-                          <AdminConfirmSubmitButton
-                            buttonLabel="Delete Product"
-                            confirmMessage="Are you sure you'd like to delete this item?"
-                            idleClassName="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
-                          />
-                        </form>
-                      </details>
-                    );
-                  })}
-                </div>
-              )}
-            </details>
-          ))}
-        </div>
-      </AdminDropdownSection>
-
-      <section id="customer-messages" className="mt-8 space-y-4">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose/20 bg-white/80 px-4 py-3 shadow-sm">
-          <h2 className="text-2xl text-rose">Customer Messages</h2>
-          <p className="rounded-full bg-rose/10 px-3 py-1 text-xs font-semibold text-rose-900">
-            {messages.length} total
-          </p>
-        </div>
-        {messages.length === 0 ? (
-          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
-            No messages yet.
-          </p>
-        ) : null}
-        <div className="space-y-2">
-          {messages.map((message) => (
-            <details
-              key={message.id}
-              id={`message-${message.id}`}
-              data-admin-key={`message-${message.id}`}
-              className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
-            >
-              <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-forest">
-                    {message.subject}
-                  </p>
-                  <p className="text-xs text-foreground/70">
-                    {message.name} ({message.email}) •{" "}
-                    {formatDateTime(message.created_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${messageStatusBadgeClass(message.status)}`}
-                  >
-                    {message.status}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
-                  >
-                    &#9662;
-                  </span>
-                </div>
-              </summary>
-
-              <div className="mt-3 space-y-2 text-sm">
-                <p className="rounded-xl bg-surface p-3 text-foreground/85">
-                  {message.message}
-                </p>
-              </div>
-              <form
-                action={updateContactMessage}
-                className="mt-3 grid gap-2 md:grid-cols-[220px_1fr_auto]"
+        <AdminDropdownSection
+          persistKey="promo-popup"
+          title="Promotional Popup"
+          description="This controls the popup modal only. It is separate from featured products and homepage feature cards."
+          tone="gold"
+        >
+          <form
+            action={savePromoPopup}
+            className="mt-4 grid gap-3 md:grid-cols-2"
+          >
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Popup Label
+              </span>
+              <input
+                name="promoLabel"
+                defaultValue={popup.promo_label}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Title
+              </span>
+              <input
+                name="title"
+                defaultValue={popup.title}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                CTA Text
+              </span>
+              <input
+                name="ctaText"
+                defaultValue={popup.cta_text}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                CTA Target Mode
+              </legend>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-forest">
+                <input
+                  type="radio"
+                  name="popupCtaMode"
+                  value="slug"
+                  defaultChecked={popupDefaultMode === "slug"}
+                />
+                Slug entry
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-forest">
+                <input
+                  type="radio"
+                  name="popupCtaMode"
+                  value="inventory"
+                  defaultChecked={popupDefaultMode === "inventory"}
+                />
+                Inventory selection
+              </label>
+            </fieldset>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                CTA Slug (slug mode)
+              </span>
+              <input
+                name="ctaSlug"
+                defaultValue={popupDefaultSlug}
+                placeholder="example-product-slug"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-foreground/65">
+                Slug mode resolves to <code>/shop/[slug]</code>.
+              </p>
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Message
+              </span>
+              <textarea
+                name="message"
+                rows={2}
+                defaultValue={popup.message}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Inventory Target (searchable)
+              </span>
+              <AdminPopupProductSelector
+                products={products.map((product) => ({
+                  id: product.id,
+                  title: product.title,
+                  slug: product.slug,
+                  sku: product.sku,
+                  active: product.active,
+                }))}
+                defaultProductId={popup.product_id}
+              />
+              <p className="text-xs text-foreground/65">
+                Inventory mode links CTA to a selected product while keeping
+                frontend popup behavior unchanged.
+              </p>
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Fallback CTA Link
+              </span>
+              <input
+                name="ctaHref"
+                defaultValue={popup.cta_href}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-foreground/65">
+                Used when slug mode has no slug or no inventory item is selected.
+              </p>
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Current Product Link
+              </span>
+              <p className="rounded-xl border border-rose/20 bg-surface px-3 py-2 text-sm text-foreground/80">
+                {popupLinkedProduct
+                  ? `${popupLinkedProduct.title} (${popupLinkedProduct.slug})`
+                  : "No product linked"}
+              </p>
+            </label>
+            <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
+              <input
+                type="checkbox"
+                name="enabled"
+                defaultChecked={popup.enabled}
+              />{" "}
+              Popup enabled
+            </label>
+            <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
+              <input
+                type="checkbox"
+                name="showCta"
+                defaultChecked={popup.show_cta}
+              />{" "}
+              Show CTA button
+            </label>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                className="rounded-xl bg-rose px-4 py-2 text-sm font-semibold text-white"
               >
-                <input type="hidden" name="messageId" value={message.id} />
-                <input
-                  type="hidden"
-                  name="redirectTo"
-                  value={`${orderViewBasePath}#message-${message.id}`}
-                />
-                <select
-                  name="status"
-                  title="Message status"
-                  aria-label="Message status"
-                  defaultValue={message.status}
-                  className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
-                >
-                  {CONTACT_STATUS_VALUES.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  name="notes"
-                  defaultValue={message.notes ?? ""}
-                  placeholder="Internal notes"
-                  className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
-                />
-                <button
-                  type="submit"
-                  className="rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-white"
-                >
-                  Save
-                </button>
-              </form>
-            </details>
-          ))}
-        </div>
-      </section>
+                Save Popup
+              </button>
+            </div>
+          </form>
+        </AdminDropdownSection>
 
-      <section id="orders-uploads" className="mt-8 space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="rounded-2xl border border-rose/20 bg-white/80 px-4 py-3 shadow-sm">
-            <h2 className="text-2xl text-rose">Orders and Uploads</h2>
-            <p className="mt-1 rounded-full bg-rose/10 px-3 py-1 text-xs font-semibold text-rose-900 inline-flex">
-              {orders.length} shown ({orderView})
+        <AdminDropdownSection
+          persistKey="homepage-feature-cards"
+          title="Homepage Feature Cards"
+          description="Edit cards shown on Home under Homepage Highlights (not the popup modal)."
+          tone="blue"
+        >
+          <form
+            action={createWelcomePost}
+            className="mt-4 grid gap-3 rounded-2xl border border-rose/15 bg-surface p-4 md:grid-cols-2"
+          >
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Title
+              </span>
+              <input
+                name="title"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Sort Order
+              </span>
+              <input
+                name="sortOrder"
+                type="number"
+                defaultValue={10}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Body
+              </span>
+              <textarea
+                name="body"
+                rows={2}
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                CTA Label
+              </span>
+              <input
+                name="ctaLabel"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                CTA Link
+              </span>
+              <input
+                name="ctaHref"
+                defaultValue="/shop"
+                className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" name="active" defaultChecked /> Active
+            </label>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+              >
+                Add Welcome Card
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-4 space-y-3">
+            {welcomePosts.map((post) => (
+              <article
+                key={post.id}
+                className="rounded-2xl border border-rose/20 bg-white p-4"
+              >
+                <form
+                  action={updateWelcomePost}
+                  className="grid gap-3 md:grid-cols-2"
+                >
+                  <input type="hidden" name="postId" value={post.id} />
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      Title
+                    </span>
+                    <input
+                      name="title"
+                      defaultValue={post.title}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      Sort Order
+                    </span>
+                    <input
+                      name="sortOrder"
+                      type="number"
+                      defaultValue={post.sort_order}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1 md:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      Body
+                    </span>
+                    <textarea
+                      name="body"
+                      rows={2}
+                      defaultValue={post.body}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      CTA Label
+                    </span>
+                    <input
+                      name="ctaLabel"
+                      defaultValue={post.cta_label ?? ""}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                      CTA Link
+                    </span>
+                    <input
+                      name="ctaHref"
+                      defaultValue={post.cta_href ?? ""}
+                      className="w-full rounded-xl border border-rose/20 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      name="active"
+                      defaultChecked={post.active}
+                    />{" "}
+                    Active
+                  </label>
+                  <div className="md:col-span-2">
+                    <button
+                      type="submit"
+                      className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Save Card
+                    </button>
+                  </div>
+                </form>
+                <form action={deleteWelcomePost} className="mt-2">
+                  <input type="hidden" name="postId" value={post.id} />
+                  <button
+                    type="submit"
+                    className="rounded-xl border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    Delete Card
+                  </button>
+                </form>
+              </article>
+            ))}
+          </div>
+        </AdminDropdownSection>
+
+        <section id="customer-messages" className="mt-8 space-y-4">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose/20 bg-white/80 px-4 py-3 shadow-sm">
+            <h2 className="text-2xl text-rose">Customer Messages</h2>
+            <p className="rounded-full bg-rose/10 px-3 py-1 text-xs font-semibold text-rose-900">
+              {messages.length} total
             </p>
           </div>
-          <div className="w-full md:w-auto">
-            <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-rose/20 bg-white/80 px-4 py-3 text-xs font-semibold shadow-sm">
-              <Link
-                href={ordersViewHref("active")}
-                className={`border-b-2 pb-1 transition ${
-                  orderView === "active"
-                    ? "border-rose text-rose"
-                    : "border-transparent text-foreground/70 hover:text-rose"
-                }`}
-              >
-                Active
-              </Link>
-              <Link
-                href={ordersViewHref("archived")}
-                className={`border-b-2 pb-1 transition ${
-                  orderView === "archived"
-                    ? "border-rose text-rose"
-                    : "border-transparent text-foreground/70 hover:text-rose"
-                }`}
-              >
-                Archived
-              </Link>
-              <Link
-                href={ordersViewHref("fulfilled")}
-                className={`border-b-2 pb-1 transition ${
-                  orderView === "fulfilled"
-                    ? "border-rose text-rose"
-                    : "border-transparent text-foreground/70 hover:text-rose"
-                }`}
-              >
-                Fulfilled Archive
-              </Link>
-              <Link
-                href={ordersViewHref("all")}
-                className={`border-b-2 pb-1 transition ${
-                  orderView === "all"
-                    ? "border-rose text-rose"
-                    : "border-transparent text-foreground/70 hover:text-rose"
-                }`}
-              >
-                All
-              </Link>
-            </div>
-          </div>
-        </div>
-        <div className="grid gap-2 md:grid-cols-2">
-          <form action={archiveResolvedOrders} className="w-full">
-            <input
-              type="hidden"
-              name="redirectTo"
-              value={`${orderViewBasePath}#orders-uploads`}
-            />
-            <AdminConfirmSubmitButton
-              buttonLabel="Archive Fulfilled/Completed/Cancelled"
-              confirmMessage="Archive all fulfilled, completed, and cancelled orders from the active list?"
-              idleClassName="w-full rounded-md border border-forest/30 bg-white px-4 py-2 text-sm font-semibold text-forest hover:bg-surface"
-            />
-          </form>
-          <form action={clearArchivedOrders} className="w-full">
-            <input
-              type="hidden"
-              name="redirectTo"
-              value={`${orderViewBasePath}#orders-uploads`}
-            />
-            <AdminConfirmSubmitButton
-              buttonLabel="Clear Archived Orders"
-              confirmMessage="Permanently delete archived fulfilled/completed/cancelled orders? This cannot be undone."
-              idleClassName="w-full rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-            />
-          </form>
-        </div>
-        {orders.length === 0 ? (
-          <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
-            No orders in this view yet.
-          </p>
-        ) : null}
-        <div className="space-y-2">
-          {orders.map((order) => {
-            const parsedNotes = parseFulfillmentNotes(order.notes);
-            const orderNumber = formatOrderNumber(order.id, order.created_at);
-            const canPrintLabel = [
-              "paid",
-              "in_production",
-              "fulfilled",
-              "completed",
-            ].includes(order.status);
-
-            return (
+          {messages.length === 0 ? (
+            <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
+              No messages yet.
+            </p>
+          ) : null}
+          <div className="space-y-2">
+            {messages.map((message) => (
               <details
-                key={order.id}
-                id={`order-${order.id}`}
-                data-admin-key={`order-${order.id}`}
+                key={message.id}
+                id={`message-${message.id}`}
+                data-admin-key={`message-${message.id}`}
                 className="rounded-2xl border border-rose/20 bg-white/85 p-4 shadow-sm"
               >
                 <summary className="admin-expand-summary flex cursor-pointer list-none items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-forest">
-                      {order.customer_name} • {formatUsd(order.amount_cents)}
+                      {message.subject}
                     </p>
                     <p className="text-xs text-foreground/70">
-                      {order.customer_email} •{" "}
-                      {formatDateTime(order.created_at)}
-                    </p>
-                    <p className="text-[11px] font-semibold text-gold">
-                      Order #{orderNumber}
+                      {message.name} ({message.email}) •{" "}
+                      {formatDateTime(message.created_at)}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1">
+                  <div className="flex items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${orderStatusBadgeClass(order.status)}`}
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${messageStatusBadgeClass(message.status)}`}
                     >
-                      {formatOrderStatusLabel(order.status)}
+                      {message.status}
                     </span>
-                    {order.archived_at ? (
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-700">
-                        archived
-                      </span>
-                    ) : null}
                     <span
                       aria-hidden="true"
                       className="admin-expand-caret rounded-full bg-rose/10 px-2 py-0.5 text-[11px] font-semibold text-rose-900"
@@ -2835,176 +3244,52 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   </div>
                 </summary>
 
-                <div className="mt-3 grid gap-4 xl:grid-cols-[1fr_auto] xl:items-start">
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="font-semibold">Order #:</span>{" "}
-                      {orderNumber}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Phone:</span>{" "}
-                      {order.customer_phone ?? "N/A"}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Option:</span>{" "}
-                      {order.product_option}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Qty:</span>{" "}
-                      {order.quantity}
-                    </p>
-                    <p>
-                      <span className="font-semibold">File:</span>{" "}
-                      {order.design_path}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Placed:</span>{" "}
-                      {formatDateTime(order.created_at)}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Paid:</span>{" "}
-                      {formatDateTime(order.paid_at)}
-                    </p>
-                    {parsedNotes.fulfillmentMethod ? (
-                      <p>
-                        <span className="font-semibold">Fulfillment:</span>{" "}
-                        {parsedNotes.fulfillmentMethod}
-                      </p>
-                    ) : null}
-                    {order.archived_at ? (
-                      <p>
-                        <span className="font-semibold">Archived:</span>{" "}
-                        {formatDateTime(order.archived_at)}
-                      </p>
-                    ) : null}
-                    {parsedNotes.bodyNotes ? (
-                      <p>
-                        <span className="font-semibold">Notes:</span>{" "}
-                        {parsedNotes.bodyNotes}
-                      </p>
-                    ) : null}
-                    {parsedNotes.entries.length > 0 ? (
-                      <div className="rounded-xl border border-violet-200 bg-violet-50 p-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">
-                          Fulfillment Log
-                        </p>
-                        <div className="mt-1 space-y-1 text-xs text-violet-900">
-                          {parsedNotes.entries.map((entry, index) => (
-                            <p key={`${order.id}-fulfillment-${index}`}>
-                              [
-                              {entry.timestamp
-                                ? formatDateTime(entry.timestamp)
-                                : "No time"}
-                              ] {entry.text}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="space-y-3">
-                    {order.fileLink ? (
-                      <a
-                        href={order.fileLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex w-full justify-center rounded-md border border-forest/25 px-3 py-2 text-xs font-semibold text-forest hover:bg-forest hover:text-white sm:w-auto"
-                      >
-                        Download Upload
-                      </a>
-                    ) : (
-                      <p className="text-xs text-red-700">
-                        Upload link unavailable
-                      </p>
-                    )}
-                    {canPrintLabel ? (
-                      <PrintOrderLabelButton
-                        orderNumber={orderNumber}
-                        customerName={order.customer_name}
-                        customerEmail={order.customer_email}
-                        productOption={order.product_option}
-                        quantity={order.quantity}
-                        createdAt={order.created_at}
-                        businessAddress={siteContent.contact.address}
-                        businessEmail={siteContent.contact.email}
-                        businessPhone={siteContent.contact.phone}
-                        defaultThankYouNote={
-                          siteContent.contact.printLabelThankYouNote
-                        }
-                      />
-                    ) : null}
-                    <form
-                      action={updateOrderStatus}
-                      className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_auto] sm:items-center"
-                    >
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <input
-                        type="hidden"
-                        name="redirectTo"
-                        value={orderRedirectTo(order.id)}
-                      />
-                      <select
-                        name="status"
-                        title="Order status"
-                        aria-label="Order status"
-                        defaultValue={order.status}
-                        className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
-                      >
-                        {ORDER_STATUS_VALUES.map((status) => (
-                          <option key={status} value={status}>
-                            {formatOrderStatusLabel(status)}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        name="fulfillmentNote"
-                        placeholder="Fulfillment note (drop-off + time)"
-                        className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-xs"
-                      />
-                      <button
-                        type="submit"
-                        className="w-full rounded-md bg-rose px-3 py-2 text-xs font-semibold text-white sm:w-auto"
-                      >
-                        Save
-                      </button>
-                    </form>
-                    {order.archived_at ? (
-                      <form action={unarchiveOrder} className="w-full sm:w-fit">
-                        <input type="hidden" name="orderId" value={order.id} />
-                        <input
-                          type="hidden"
-                          name="redirectTo"
-                          value={orderRedirectTo(order.id)}
-                        />
-                        <button
-                          type="submit"
-                          className="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface sm:w-auto"
-                        >
-                          Unarchive
-                        </button>
-                      </form>
-                    ) : isArchivableOrderStatus(order.status) ? (
-                      <form action={archiveOrder} className="w-full sm:w-fit">
-                        <input type="hidden" name="orderId" value={order.id} />
-                        <input
-                          type="hidden"
-                          name="redirectTo"
-                          value={orderRedirectTo(order.id)}
-                        />
-                        <AdminConfirmSubmitButton
-                          buttonLabel="Archive Order"
-                          confirmMessage="Archive this fulfilled/completed/cancelled order?"
-                          idleClassName="w-full rounded-md border border-forest/30 bg-white px-3 py-2 text-xs font-semibold text-forest hover:bg-surface sm:w-auto"
-                        />
-                      </form>
-                    ) : null}
-                  </div>
+                <div className="mt-3 space-y-2 text-sm">
+                  <p className="rounded-xl bg-surface p-3 text-foreground/85">
+                    {message.message}
+                  </p>
                 </div>
+                <form
+                  action={updateContactMessage}
+                  className="mt-3 grid gap-2 md:grid-cols-[220px_1fr_auto]"
+                >
+                  <input type="hidden" name="messageId" value={message.id} />
+                  <input
+                    type="hidden"
+                    name="redirectTo"
+                    value={`${orderViewBasePath}#message-${message.id}`}
+                  />
+                  <select
+                    name="status"
+                    title="Message status"
+                    aria-label="Message status"
+                    defaultValue={message.status}
+                    className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
+                  >
+                    {CONTACT_STATUS_VALUES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    name="notes"
+                    defaultValue={message.notes ?? ""}
+                    placeholder="Internal notes"
+                    className="rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-white"
+                  >
+                    Save
+                  </button>
+                </form>
               </details>
-            );
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      </AdminDropdownSection>
     </main>
   );
 }

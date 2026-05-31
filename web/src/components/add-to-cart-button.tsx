@@ -13,6 +13,7 @@ type AddToCartButtonProps = {
   variantId?: string;
   variantSize?: string;
   variantColor?: string;
+  variantBrand?: string;
   label?: string;
   addedLabel?: string;
   className?: string;
@@ -29,6 +30,7 @@ export function AddToCartButton({
   variantId,
   variantSize,
   variantColor,
+  variantBrand,
   label = "Add to Cart",
   addedLabel = "Added",
   className,
@@ -71,6 +73,7 @@ export function AddToCartButton({
         variantId,
         variantSize,
         variantColor,
+        variantBrand,
         productSlug,
         title,
         price,
@@ -88,6 +91,7 @@ export function AddToCartButton({
       metadata: {
         variantSize: variantSize ?? null,
         variantColor: variantColor ?? null,
+        variantBrand: variantBrand ?? null,
       },
     });
 

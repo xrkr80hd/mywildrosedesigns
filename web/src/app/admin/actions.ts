@@ -4,6 +4,7 @@ import { appendFulfillmentNote } from "@/lib/fulfillment-notes";
 import { recordSaleMovementsForOrder } from "@/lib/order-sales";
 import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import { DEFAULT_PRODUCT_OPTIONS } from "@/lib/product-options";
+import { getSizeSortOrder } from "@/lib/product-variants";
 import { isSiteSettingTitle, saveSiteContentValues } from "@/lib/site-content";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -133,6 +134,28 @@ const createProductSchema = z.object({
   active: z.boolean(),
 });
 
+const createBundleProductSchema = z.object({
+  title: z.string().trim().min(2).max(180),
+  sku: z.string().trim().max(40).optional(),
+  description: z.string().trim().max(2000),
+  imageUrl: z.string().trim().max(2048).optional(),
+  priceCents: currencyCentsSchema,
+  stockOnHand: z.coerce.number().int().min(0).max(1_000_000),
+  isFeatured: z.boolean(),
+  isHot: z.boolean(),
+  saleEnabled: z.boolean(),
+  salePercentOff: z.coerce.number().int().min(0).max(90),
+  saleLabel: z.string().trim().min(1).max(40),
+  cartCtaText: z.string().trim().min(1).max(60),
+  active: z.boolean(),
+});
+
+const bundleComponentInputSchema = z.object({
+  productId: z.string().uuid(),
+  variantId: z.string().uuid().optional(),
+  quantity: z.number().int().min(1).max(100),
+});
+
 const updateProductSchema = z.object({
   productId: z.string().uuid(),
   title: z.string().trim().min(2).max(180),
@@ -186,6 +209,7 @@ const createProductVariantSchema = z.object({
   productId: z.string().uuid(),
   sizeValue: z.string().trim().max(40).optional(),
   colorValue: z.string().trim().max(60).optional(),
+  brandName: z.string().trim().max(120).optional(),
   sku: z.string().trim().max(80).optional(),
   priceOverrideCents: optionalPriceOverrideSchema,
   stockOnHand: z.coerce.number().int().min(0).max(1_000_000),
@@ -198,6 +222,27 @@ const updateProductVariantSchema = createProductVariantSchema.extend({
 
 const deleteProductVariantSchema = z.object({
   variantId: z.string().uuid(),
+});
+
+const createVariantTemplateSchema = z.object({
+  name: z.string().trim().min(2).max(140),
+  brandName: z.string().trim().min(2).max(120),
+  active: z.boolean(),
+});
+
+const applyVariantTemplateSchema = z.object({
+  productId: z.string().uuid(),
+  templateId: z.string().uuid(),
+  colorValue: z.string().trim().min(1).max(60),
+  stockOnHand: z.coerce.number().int().min(0).max(1_000_000),
+  sizeLabels: z.array(z.string().trim().min(1).max(40)).min(1),
+});
+
+const initialProductTemplateSchema = z.object({
+  templateId: z.string().uuid(),
+  colorValue: z.string().trim().min(1).max(60),
+  stockOnHand: z.coerce.number().int().min(0).max(1_000_000),
+  sizeLabels: z.array(z.string().trim().min(1).max(40)).min(1),
 });
 
 const POPUP_CTA_MODE_VALUES = ["slug", "inventory"] as const;
@@ -448,6 +493,41 @@ function normalizeOptionalSku(value?: string): string | null {
   return normalizeSku(text);
 }
 
+type BundleComponentInput = z.infer<typeof bundleComponentInputSchema>;
+
+function parseBundleComponentInputs(
+  formData: FormData,
+): BundleComponentInput[] | null {
+  const productIds = formData
+    .getAll("componentProductIds")
+    .map((value) => String(value ?? "").trim());
+  const variantIds = formData
+    .getAll("componentVariantIds")
+    .map((value) => String(value ?? "").trim());
+  const quantities = formData
+    .getAll("componentQuantities")
+    .map((value) => Number(value));
+
+  const rows = productIds
+    .map((productId, index) => ({
+      productId,
+      variantId: variantIds[index] || undefined,
+      quantity: quantities[index],
+    }))
+    .filter((row) => row.productId);
+
+  const parsedRows: BundleComponentInput[] = [];
+  for (const row of rows) {
+    const parsed = bundleComponentInputSchema.safeParse(row);
+    if (!parsed.success) {
+      return null;
+    }
+    parsedRows.push(parsed.data);
+  }
+
+  return parsedRows;
+}
+
 function categoryCodeFromSlug(slug: string): string {
   const parts = slug
     .toUpperCase()
@@ -668,6 +748,54 @@ async function ensureUniqueSku(
   }
 }
 
+async function ensureUniqueVariantSku(
+  baseSku: string,
+  ignoreId?: string,
+): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+  const root = normalizeSku(baseSku);
+  let candidate = root;
+  let counter = 1;
+
+  while (true) {
+    const existingResult = await supabase
+      .from("product_variants")
+      .select("id")
+      .eq("sku", candidate)
+      .maybeSingle();
+
+    if (existingResult.error) {
+      if (isMissingTableError(existingResult.error, "product_variants")) {
+        throw new Error("Variant table is missing.");
+      }
+      throw new Error(existingResult.error.message);
+    }
+
+    const existingId = (existingResult.data as { id: string } | null)?.id;
+    if (!existingId || (ignoreId && existingId === ignoreId)) {
+      return candidate;
+    }
+
+    counter += 1;
+    candidate = `${root}-${counter}`;
+  }
+}
+
+function buildVariantSku(input: {
+  productSku?: string | null;
+  productTitle: string;
+  brandName: string;
+  colorValue: string;
+  sizeValue: string;
+}) {
+  const productPart =
+    input.productSku?.trim() || slugify(input.productTitle).toUpperCase();
+  const brandPart = slugify(input.brandName).toUpperCase().slice(0, 5);
+  const colorPart = slugify(input.colorValue).toUpperCase().slice(0, 5);
+  const sizePart = normalizeSku(input.sizeValue);
+  return normalizeSku(`${productPart}-${brandPart}-${colorPart}-${sizePart}`);
+}
+
 async function getOrCreateFallbackCategory(
   excludedCategoryId: string,
 ): Promise<string> {
@@ -724,6 +852,128 @@ async function getOrCreateFallbackCategory(
   }
 
   return String(createResult.data.id);
+}
+
+async function getOrCreateBundlesCategory(): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+  const existingResult = await supabase
+    .from("categories")
+    .select("id")
+    .eq("slug", "bundles")
+    .maybeSingle();
+
+  if (existingResult.error) {
+    throw new Error(existingResult.error.message);
+  }
+
+  if (existingResult.data?.id) {
+    return String(existingResult.data.id);
+  }
+
+  let createResult = await supabase
+    .from("categories")
+    .insert({
+      name: "Bundles",
+      slug: "bundles",
+      sort_order: 15,
+      image_url: null,
+      active: true,
+    })
+    .select("id")
+    .single();
+
+  if (
+    createResult.error &&
+    isMissingColumnError(createResult.error, "image_url")
+  ) {
+    createResult = await supabase
+      .from("categories")
+      .insert({
+        name: "Bundles",
+        slug: "bundles",
+        sort_order: 15,
+        active: true,
+      })
+      .select("id")
+      .single();
+  }
+
+  if (createResult.error || !createResult.data?.id) {
+    throw new Error(
+      createResult.error?.message ?? "Unable to create Bundles category.",
+    );
+  }
+
+  return String(createResult.data.id);
+}
+
+async function createProductVariantsFromTemplate(input: {
+  productId: string;
+  productSku?: string | null;
+  productTitle: string;
+  templateId: string;
+  colorValue: string;
+  stockOnHand: number;
+  sizeLabels: string[];
+}) {
+  const supabase = getSupabaseAdminClient();
+  const templateResult = await supabase
+    .from("variant_templates")
+    .select("id, name, brand_name, active")
+    .eq("id", input.templateId)
+    .maybeSingle();
+
+  if (templateResult.error || !templateResult.data?.id) {
+    throw new Error(
+      templateResult.error?.message ?? "Unable to resolve variant template.",
+    );
+  }
+
+  const templateSizesResult = await supabase
+    .from("variant_template_sizes")
+    .select("size_label, size_sort_order, price_cents")
+    .eq("template_id", input.templateId)
+    .in("size_label", input.sizeLabels)
+    .order("size_sort_order", { ascending: true });
+
+  if (templateSizesResult.error) {
+    throw new Error(templateSizesResult.error.message);
+  }
+
+  const templateSizes = templateSizesResult.data ?? [];
+  if (templateSizes.length === 0) {
+    throw new Error("Template has no selected sizes.");
+  }
+
+  const generatedRows = [];
+  for (const size of templateSizes) {
+    const sku = await ensureUniqueVariantSku(
+      buildVariantSku({
+        productSku: input.productSku,
+        productTitle: input.productTitle,
+        brandName: String(templateResult.data.brand_name),
+        colorValue: input.colorValue,
+        sizeValue: String(size.size_label),
+      }),
+    );
+
+    generatedRows.push({
+      product_id: input.productId,
+      size_value: String(size.size_label),
+      color_value: input.colorValue,
+      brand_name: String(templateResult.data.brand_name),
+      source_template_id: input.templateId,
+      sku,
+      price_override_cents: Number(size.price_cents),
+      stock_on_hand: input.stockOnHand,
+      active: true,
+    });
+  }
+
+  const insertResult = await supabase.from("product_variants").insert(generatedRows);
+  if (insertResult.error) {
+    throw new Error(insertResult.error.message);
+  }
 }
 
 export async function updateOrderStatus(formData: FormData) {
@@ -1289,6 +1539,27 @@ export async function updateCategory(formData: FormData) {
     return redirectAdminError("save_failed", redirectTo);
   }
   const supabase = getSupabaseAdminClient();
+
+  if (!parsed.data.active) {
+    let fallbackCategoryId = "";
+    try {
+      fallbackCategoryId = await getOrCreateFallbackCategory(
+        parsed.data.categoryId,
+      );
+    } catch {
+      return redirectAdminError("save_failed", redirectTo);
+    }
+
+    const moveProductsResult = await supabase
+      .from("products")
+      .update({ category_id: fallbackCategoryId })
+      .eq("category_id", parsed.data.categoryId);
+
+    if (moveProductsResult.error) {
+      return redirectAdminError("save_failed", redirectTo);
+    }
+  }
+
   let updateResult = await supabase
     .from("categories")
     .update({
@@ -1392,6 +1663,20 @@ export async function createProduct(formData: FormData) {
     return redirectAdminError("invalid_payload", redirectTo);
   }
 
+  const initialTemplateId = String(formData.get("initialTemplateId") ?? "").trim();
+  const initialTemplate = initialTemplateId
+    ? initialProductTemplateSchema.safeParse({
+        templateId: initialTemplateId,
+        colorValue: formData.get("initialColorValue"),
+        stockOnHand: formData.get("initialStockOnHand"),
+        sizeLabels: formData.getAll("initialSizeLabels"),
+      })
+    : null;
+
+  if (initialTemplate && !initialTemplate.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
   let sku = "";
   try {
     sku = parsed.data.sku
@@ -1403,6 +1688,7 @@ export async function createProduct(formData: FormData) {
 
   const supabase = getSupabaseAdminClient();
   let created = false;
+  let createdProductId = "";
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let slug = "";
     try {
@@ -1414,26 +1700,31 @@ export async function createProduct(formData: FormData) {
       return redirectAdminError("save_failed", redirectTo);
     }
 
-    const insertResult = await supabase.from("products").insert({
-      title: parsed.data.title,
-      sku,
-      slug,
-      description: parsed.data.description,
-      category_id: parsed.data.categoryId,
-      image_url: parsed.data.imageUrl || null,
-      price_cents: parsed.data.priceCents,
-      stock_on_hand: parsed.data.stockOnHand,
-      is_featured: parsed.data.isFeatured,
-      is_hot: parsed.data.isHot,
-      sale_enabled: parsed.data.saleEnabled,
-      sale_percent_off: parsed.data.salePercentOff,
-      sale_label: parsed.data.saleLabel,
-      cart_cta_text: parsed.data.cartCtaText,
-      active: parsed.data.active,
-    });
+    const insertResult = await supabase
+      .from("products")
+      .insert({
+        title: parsed.data.title,
+        sku,
+        slug,
+        description: parsed.data.description,
+        category_id: parsed.data.categoryId,
+        image_url: parsed.data.imageUrl || null,
+        price_cents: parsed.data.priceCents,
+        stock_on_hand: parsed.data.stockOnHand,
+        is_featured: parsed.data.isFeatured,
+        is_hot: parsed.data.isHot,
+        sale_enabled: parsed.data.saleEnabled,
+        sale_percent_off: parsed.data.salePercentOff,
+        sale_label: parsed.data.saleLabel,
+        cart_cta_text: parsed.data.cartCtaText,
+        active: parsed.data.active,
+      })
+      .select("id")
+      .single();
 
     if (!insertResult.error) {
       created = true;
+      createdProductId = String(insertResult.data.id);
       break;
     }
 
@@ -1446,9 +1737,191 @@ export async function createProduct(formData: FormData) {
     return redirectAdminError("save_failed", redirectTo);
   }
 
+  if (initialTemplate?.success) {
+    try {
+      await createProductVariantsFromTemplate({
+        productId: createdProductId,
+        productSku: sku,
+        productTitle: parsed.data.title,
+        templateId: initialTemplate.data.templateId,
+        colorValue: initialTemplate.data.colorValue,
+        stockOnHand: initialTemplate.data.stockOnHand,
+        sizeLabels: initialTemplate.data.sizeLabels,
+      });
+    } catch {
+      await supabase.from("products").delete().eq("id", createdProductId);
+      return redirectAdminError("save_failed", redirectTo);
+    }
+  }
+
   revalidatePath("/");
   revalidatePath("/shop");
   revalidatePath("/admin");
+  return redirectAdminSuccess("product_created", redirectTo);
+}
+
+export async function createBundleProduct(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = createBundleProductSchema.safeParse({
+    title: formData.get("title"),
+    sku: formData.get("sku") || undefined,
+    description: formData.get("description"),
+    imageUrl: formData.get("imageUrl") || undefined,
+    priceCents: formData.get("priceCents"),
+    stockOnHand: formData.get("stockOnHand"),
+    isFeatured: asBool(formData, "isFeatured"),
+    isHot: asBool(formData, "isHot"),
+    saleEnabled: asBool(formData, "saleEnabled"),
+    salePercentOff: formData.get("salePercentOff"),
+    saleLabel: formData.get("saleLabel"),
+    cartCtaText: formData.get("cartCtaText"),
+    active: asBool(formData, "active"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const componentInputs = parseBundleComponentInputs(formData);
+  if (!componentInputs || componentInputs.length === 0) {
+    return redirectAdminError("bundle_requires_components", redirectTo);
+  }
+
+  let categoryId = "";
+  let sku = "";
+  try {
+    categoryId = await getOrCreateBundlesCategory();
+    sku = parsed.data.sku
+      ? await ensureUniqueSku(parsed.data.sku)
+      : await generateCategorySku(categoryId, parsed.data.title);
+  } catch {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const componentProductIds = Array.from(
+    new Set(componentInputs.map((component) => component.productId)),
+  );
+  const componentVariantIds = Array.from(
+    new Set(
+      componentInputs
+        .map((component) => component.variantId)
+        .filter((variantId): variantId is string => Boolean(variantId)),
+    ),
+  );
+
+  const componentProductsResult = await supabase
+    .from("products")
+    .select("id")
+    .in("id", componentProductIds);
+
+  if (
+    componentProductsResult.error ||
+    (componentProductsResult.data ?? []).length !== componentProductIds.length
+  ) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  if (componentVariantIds.length > 0) {
+    const componentVariantsResult = await supabase
+      .from("product_variants")
+      .select("id, product_id")
+      .in("id", componentVariantIds);
+
+    if (componentVariantsResult.error) {
+      return redirectAdminError("save_failed", redirectTo);
+    }
+
+    const variantProductById = new Map(
+      (componentVariantsResult.data ?? []).map((variant) => [
+        String(variant.id),
+        String(variant.product_id),
+      ]),
+    );
+
+    const variantMismatch = componentInputs.some(
+      (component) =>
+        component.variantId &&
+        variantProductById.get(component.variantId) !== component.productId,
+    );
+
+    if (
+      variantMismatch ||
+      variantProductById.size !== componentVariantIds.length
+    ) {
+      return redirectAdminError("invalid_payload", redirectTo);
+    }
+  }
+
+  let created = false;
+  let createdBundleId = "";
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    let slug = "";
+    try {
+      slug = await generateProductSlug(categoryId, parsed.data.title);
+    } catch {
+      return redirectAdminError("save_failed", redirectTo);
+    }
+
+    const insertResult = await supabase
+      .from("products")
+      .insert({
+        title: parsed.data.title,
+        sku,
+        slug,
+        description: parsed.data.description,
+        category_id: categoryId,
+        image_url: parsed.data.imageUrl || null,
+        price_cents: parsed.data.priceCents,
+        stock_on_hand: parsed.data.stockOnHand,
+        is_featured: parsed.data.isFeatured,
+        is_hot: parsed.data.isHot,
+        sale_enabled: parsed.data.saleEnabled,
+        sale_percent_off: parsed.data.salePercentOff,
+        sale_label: parsed.data.saleLabel,
+        cart_cta_text: parsed.data.cartCtaText,
+        active: parsed.data.active,
+      })
+      .select("id")
+      .single();
+
+    if (!insertResult.error) {
+      created = true;
+      createdBundleId = String(insertResult.data.id);
+      break;
+    }
+
+    if (!isSlugConflict(insertResult.error)) {
+      return redirectAdminError("save_failed", redirectTo);
+    }
+  }
+
+  if (!created) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const componentInsertResult = await supabase.from("bundle_components").insert(
+    componentInputs.map((component, index) => ({
+      bundle_product_id: createdBundleId,
+      component_product_id: component.productId,
+      component_variant_id: component.variantId ?? null,
+      quantity: component.quantity,
+      sort_order: (index + 1) * 10,
+    })),
+  );
+
+  if (componentInsertResult.error) {
+    await supabase.from("products").delete().eq("id", createdBundleId);
+    if (isMissingTableError(componentInsertResult.error, "bundle_components")) {
+      return redirectAdminError("bundle_schema_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/shop");
+  revalidatePath("/admin");
+  revalidatePath("/admin/inventory");
   return redirectAdminSuccess("product_created", redirectTo);
 }
 
@@ -1587,12 +2060,196 @@ export async function deleteProductCard(formData: FormData) {
   return redirectAdminSuccess("product_deleted", redirectTo);
 }
 
+export async function createVariantTemplate(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = createVariantTemplateSchema.safeParse({
+    name: formData.get("name"),
+    brandName: formData.get("brandName"),
+    active: asBool(formData, "active"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const requestedSizes = formData
+    .getAll("templateSizes")
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  const uniqueSizes = Array.from(new Set(requestedSizes)).sort(
+    (a, b) => getSizeSortOrder(a) - getSizeSortOrder(b),
+  );
+
+  if (uniqueSizes.length === 0) {
+    return redirectAdminError("template_requires_size", redirectTo);
+  }
+
+  const sizeRows = uniqueSizes
+    .map((sizeLabel) => {
+      const priceCents = parseCurrencyToCents(formData.get(`price_${sizeLabel}`));
+      return {
+        size_label: sizeLabel,
+        size_sort_order: getSizeSortOrder(sizeLabel),
+        price_cents: priceCents,
+      };
+    })
+    .filter(
+      (row): row is {
+        size_label: string;
+        size_sort_order: number;
+        price_cents: number;
+      } => typeof row.price_cents === "number" && row.price_cents > 0,
+    );
+
+  if (sizeRows.length !== uniqueSizes.length) {
+    return redirectAdminError("template_requires_price", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const templateResult = await supabase
+    .from("variant_templates")
+    .insert({
+      name: parsed.data.name,
+      brand_name: parsed.data.brandName,
+      active: parsed.data.active,
+    })
+    .select("id")
+    .single();
+
+  if (templateResult.error || !templateResult.data?.id) {
+    if (isMissingTableError(templateResult.error, "variant_templates")) {
+      return redirectAdminError("template_table_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const sizesResult = await supabase.from("variant_template_sizes").insert(
+    sizeRows.map((row) => ({
+      template_id: String(templateResult.data.id),
+      ...row,
+    })),
+  );
+
+  if (sizesResult.error) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/inventory");
+  return redirectAdminSuccess("template_created", redirectTo);
+}
+
+export async function applyVariantTemplate(formData: FormData) {
+  const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
+  const parsed = applyVariantTemplateSchema.safeParse({
+    productId: formData.get("productId"),
+    templateId: formData.get("templateId"),
+    colorValue: formData.get("colorValue"),
+    stockOnHand: formData.get("stockOnHand"),
+    sizeLabels: formData.getAll("sizeLabels"),
+  });
+
+  if (!parsed.success) {
+    return redirectAdminError("invalid_payload", redirectTo);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const templateResult = await supabase
+    .from("variant_templates")
+    .select("id, name, brand_name, active")
+    .eq("id", parsed.data.templateId)
+    .maybeSingle();
+
+  if (templateResult.error || !templateResult.data?.id) {
+    if (isMissingTableError(templateResult.error, "variant_templates")) {
+      return redirectAdminError("template_table_missing", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const templateSizesResult = await supabase
+    .from("variant_template_sizes")
+    .select("size_label, size_sort_order, price_cents")
+    .eq("template_id", parsed.data.templateId)
+    .in("size_label", parsed.data.sizeLabels)
+    .order("size_sort_order", { ascending: true });
+
+  if (templateSizesResult.error) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const templateSizes = templateSizesResult.data ?? [];
+  if (templateSizes.length === 0) {
+    return redirectAdminError("template_requires_size", redirectTo);
+  }
+
+  const productResult = await supabase
+    .from("products")
+    .select("id, sku, title")
+    .eq("id", parsed.data.productId)
+    .maybeSingle();
+
+  if (productResult.error || !productResult.data?.id) {
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  const generatedRows = [];
+  for (const size of templateSizes) {
+    const sku = await ensureUniqueVariantSku(
+      buildVariantSku({
+        productSku: productResult.data.sku,
+        productTitle: productResult.data.title,
+        brandName: String(templateResult.data.brand_name),
+        colorValue: parsed.data.colorValue,
+        sizeValue: String(size.size_label),
+      }),
+    );
+
+    generatedRows.push({
+      product_id: parsed.data.productId,
+      size_value: String(size.size_label),
+      color_value: parsed.data.colorValue,
+      brand_name: String(templateResult.data.brand_name),
+      source_template_id: parsed.data.templateId,
+      sku,
+      price_override_cents: Number(size.price_cents),
+      stock_on_hand: parsed.data.stockOnHand,
+      active: true,
+    });
+  }
+
+  const insertResult = await supabase.from("product_variants").insert(generatedRows);
+
+  if (insertResult.error) {
+    if (isMissingTableError(insertResult.error, "product_variants")) {
+      return redirectAdminError("variant_table_missing", redirectTo);
+    }
+    if (
+      isMissingColumnError(insertResult.error, "brand_name") ||
+      isMissingColumnError(insertResult.error, "source_template_id")
+    ) {
+      return redirectAdminError("template_schema_missing", redirectTo);
+    }
+    if (isUniqueViolation(insertResult.error)) {
+      return redirectAdminError("variant_conflict", redirectTo);
+    }
+    return redirectAdminError("save_failed", redirectTo);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/shop");
+  revalidatePath("/admin");
+  revalidatePath("/admin/inventory");
+  return redirectAdminSuccess("variants_generated", redirectTo);
+}
+
 export async function createProductVariant(formData: FormData) {
   const redirectTo = resolveAdminRedirectTarget(formData, "/admin");
   const parsed = createProductVariantSchema.safeParse({
     productId: formData.get("productId"),
     sizeValue: formData.get("sizeValue") || undefined,
     colorValue: formData.get("colorValue") || undefined,
+    brandName: formData.get("brandName") || undefined,
     sku: formData.get("sku") || undefined,
     priceOverrideCents: formData.get("priceOverrideCents") || undefined,
     stockOnHand: formData.get("stockOnHand"),
@@ -1605,6 +2262,7 @@ export async function createProductVariant(formData: FormData) {
 
   const sizeValue = nullableText(formData.get("sizeValue"));
   const colorValue = nullableText(formData.get("colorValue"));
+  const brandName = nullableText(formData.get("brandName"));
   if (!sizeValue && !colorValue) {
     return redirectAdminError("variant_requires_option", redirectTo);
   }
@@ -1614,6 +2272,7 @@ export async function createProductVariant(formData: FormData) {
     product_id: parsed.data.productId,
     size_value: sizeValue,
     color_value: colorValue,
+    brand_name: brandName,
     sku: normalizeOptionalSku(parsed.data.sku),
     price_override_cents: parsed.data.priceOverrideCents ?? null,
     stock_on_hand: parsed.data.stockOnHand,
@@ -1623,6 +2282,9 @@ export async function createProductVariant(formData: FormData) {
   if (insertResult.error) {
     if (isMissingTableError(insertResult.error, "product_variants")) {
       return redirectAdminError("variant_table_missing", redirectTo);
+    }
+    if (isMissingColumnError(insertResult.error, "brand_name")) {
+      return redirectAdminError("template_schema_missing", redirectTo);
     }
     if (isUniqueViolation(insertResult.error)) {
       return redirectAdminError("variant_conflict", redirectTo);
@@ -1644,6 +2306,7 @@ export async function updateProductVariant(formData: FormData) {
     productId: formData.get("productId"),
     sizeValue: formData.get("sizeValue") || undefined,
     colorValue: formData.get("colorValue") || undefined,
+    brandName: formData.get("brandName") || undefined,
     sku: formData.get("sku") || undefined,
     priceOverrideCents: formData.get("priceOverrideCents") || undefined,
     stockOnHand: formData.get("stockOnHand"),
@@ -1656,6 +2319,7 @@ export async function updateProductVariant(formData: FormData) {
 
   const sizeValue = nullableText(formData.get("sizeValue"));
   const colorValue = nullableText(formData.get("colorValue"));
+  const brandName = nullableText(formData.get("brandName"));
   if (!sizeValue && !colorValue) {
     return redirectAdminError("variant_requires_option", redirectTo);
   }
@@ -1666,6 +2330,7 @@ export async function updateProductVariant(formData: FormData) {
     .update({
       size_value: sizeValue,
       color_value: colorValue,
+      brand_name: brandName,
       sku: normalizeOptionalSku(parsed.data.sku),
       price_override_cents: parsed.data.priceOverrideCents ?? null,
       stock_on_hand: parsed.data.stockOnHand,
@@ -1677,6 +2342,9 @@ export async function updateProductVariant(formData: FormData) {
   if (updateResult.error) {
     if (isMissingTableError(updateResult.error, "product_variants")) {
       return redirectAdminError("variant_table_missing", redirectTo);
+    }
+    if (isMissingColumnError(updateResult.error, "brand_name")) {
+      return redirectAdminError("template_schema_missing", redirectTo);
     }
     if (isUniqueViolation(updateResult.error)) {
       return redirectAdminError("variant_conflict", redirectTo);

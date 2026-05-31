@@ -47,7 +47,9 @@ export function AdminHelpShell() {
     pathname === "/admin/how-to";
 
   useEffect(() => {
-    const media = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const media = window.matchMedia(
+      "(min-width: 960px) and (hover: hover) and (pointer: fine)",
+    );
     const applyMatch = () => setIsDesktop(media.matches);
     applyMatch();
     media.addEventListener("change", applyMatch);
@@ -58,24 +60,30 @@ export function AdminHelpShell() {
 
   useEffect(() => {
     const raw = window.localStorage.getItem(ADMIN_HELP_STORAGE_KEY);
-    if (!raw) {
+    let nextState = DEFAULT_PANEL_STATE;
+
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as HelpPanelState;
+        nextState = {
+          isOpen: Boolean(parsed?.isOpen),
+          isMinimized: Boolean(parsed?.isMinimized),
+          x: typeof parsed?.x === "number" ? parsed.x : null,
+          y: typeof parsed?.y === "number" ? parsed.y : null,
+        };
+      } catch {
+        nextState = DEFAULT_PANEL_STATE;
+      }
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setPanelState(nextState);
       setReady(true);
-      return;
-    }
+    });
 
-    try {
-      const parsed = JSON.parse(raw) as HelpPanelState;
-      setPanelState({
-        isOpen: Boolean(parsed?.isOpen),
-        isMinimized: Boolean(parsed?.isMinimized),
-        x: typeof parsed?.x === "number" ? parsed.x : null,
-        y: typeof parsed?.y === "number" ? parsed.y : null,
-      });
-    } catch {
-      setPanelState(DEFAULT_PANEL_STATE);
-    }
-
-    setReady(true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   useEffect(() => {

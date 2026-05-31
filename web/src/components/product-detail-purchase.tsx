@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AddToCartButton } from "@/components/add-to-cart-button";
 
 type ProductVariantOption = {
   id: string;
   sizeValue: string | null;
   colorValue: string | null;
+  brandName: string | null;
   label: string;
   sku: string | null;
   basePriceCents: number;
@@ -48,10 +49,17 @@ export function ProductDetailPurchase({ product }: ProductDetailPurchaseProps) {
     () => uniqueNonEmpty(product.variants.map((variant) => variant.colorValue)),
     [product.variants],
   );
+  const brandOptions = useMemo(
+    () => uniqueNonEmpty(product.variants.map((variant) => variant.brandName)),
+    [product.variants],
+  );
 
   const [selectedSize, setSelectedSize] = useState<string>(sizeOptions[0] ?? "");
   const [selectedColor, setSelectedColor] = useState<string>(
     hasVariants ? (product.variants[0]?.colorValue ?? "") : "",
+  );
+  const [selectedBrand, setSelectedBrand] = useState<string>(
+    hasVariants ? (product.variants[0]?.brandName ?? "") : "",
   );
 
   const availableColors = useMemo(() => {
@@ -64,14 +72,27 @@ export function ProductDetailPurchase({ product }: ProductDetailPurchaseProps) {
     return uniqueNonEmpty(scoped.map((variant) => variant.colorValue));
   }, [hasVariants, product.variants, selectedSize]);
 
-  useEffect(() => {
-    if (!selectedColor) {
-      return;
+  const currentColor =
+    selectedColor && availableColors.includes(selectedColor)
+      ? selectedColor
+      : (availableColors[0] ?? "");
+
+  const availableBrands = useMemo(() => {
+    if (!hasVariants) {
+      return [];
     }
-    if (!availableColors.includes(selectedColor)) {
-      setSelectedColor(availableColors[0] ?? "");
-    }
-  }, [availableColors, selectedColor]);
+    const scoped = product.variants.filter((variant) => {
+      const matchesSize = selectedSize ? variant.sizeValue === selectedSize : true;
+      const matchesColor = currentColor ? variant.colorValue === currentColor : true;
+      return matchesSize && matchesColor;
+    });
+    return uniqueNonEmpty(scoped.map((variant) => variant.brandName));
+  }, [currentColor, hasVariants, product.variants, selectedSize]);
+
+  const currentBrand =
+    selectedBrand && availableBrands.includes(selectedBrand)
+      ? selectedBrand
+      : (availableBrands[0] ?? "");
 
   const selectedVariant = useMemo(() => {
     if (!hasVariants) {
@@ -80,8 +101,9 @@ export function ProductDetailPurchase({ product }: ProductDetailPurchaseProps) {
 
     const exactMatch = product.variants.find((variant) => {
       const matchesSize = selectedSize ? variant.sizeValue === selectedSize : true;
-      const matchesColor = selectedColor ? variant.colorValue === selectedColor : true;
-      return matchesSize && matchesColor;
+      const matchesColor = currentColor ? variant.colorValue === currentColor : true;
+      const matchesBrand = currentBrand ? variant.brandName === currentBrand : true;
+      return matchesSize && matchesColor && matchesBrand;
     });
 
     if (exactMatch) {
@@ -93,7 +115,7 @@ export function ProductDetailPurchase({ product }: ProductDetailPurchaseProps) {
         selectedSize ? variant.sizeValue === selectedSize : true,
       ) ?? product.variants[0]
     );
-  }, [hasVariants, product.variants, selectedColor, selectedSize]);
+  }, [currentBrand, currentColor, hasVariants, product.variants, selectedSize]);
 
   const displayBasePriceCents = selectedVariant?.basePriceCents ?? product.basePriceCents;
   const displayEffectivePriceCents =
@@ -146,13 +168,32 @@ export function ProductDetailPurchase({ product }: ProductDetailPurchaseProps) {
                 Color
               </span>
               <select
-                value={selectedColor}
+                value={currentColor}
                 onChange={(event) => setSelectedColor(event.currentTarget.value)}
                 className="w-full rounded-xl border border-rose/20 bg-white px-3 py-2 text-sm"
               >
                 {(availableColors.length > 0 ? availableColors : colorOptions).map((color) => (
                   <option key={color} value={color}>
                     {color}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {brandOptions.length > 0 ? (
+            <label className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+                Brand
+              </span>
+              <select
+                value={currentBrand}
+                onChange={(event) => setSelectedBrand(event.currentTarget.value)}
+                className="w-full rounded-xl border border-rose/20 bg-white px-3 py-2 text-sm"
+              >
+                {(availableBrands.length > 0 ? availableBrands : brandOptions).map((brand) => (
+                  <option key={brand} value={brand}>
+                    {brand}
                   </option>
                 ))}
               </select>
@@ -185,6 +226,7 @@ export function ProductDetailPurchase({ product }: ProductDetailPurchaseProps) {
         variantId={selectedVariant?.id}
         variantSize={selectedVariant?.sizeValue ?? undefined}
         variantColor={selectedVariant?.colorValue ?? undefined}
+        variantBrand={selectedVariant?.brandName ?? undefined}
         label={isOutOfStock ? "Out of Stock" : product.cartCtaText}
         className="rounded-xl bg-rose px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose/90"
         disabled={isOutOfStock || (hasVariants && !selectedVariant)}

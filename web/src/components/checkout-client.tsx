@@ -98,6 +98,7 @@ export function CheckoutClient() {
         variantId: item.variantId,
         variantSize: item.variantSize,
         variantColor: item.variantColor,
+        variantBrand: item.variantBrand,
         quantity: item.quantity,
       })),
     };

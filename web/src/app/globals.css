@@ -32,6 +32,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-body), sans-serif;
   min-height: 100vh;
+  scroll-padding-top: 5.5rem;
 }
 
 /* Normalize rounded utilities into a sharper square system across the app. */
@@ -640,6 +641,13 @@ details[open] > .admin-expand-summary .admin-expand-caret {
   color: rgba(28, 26, 25, 0.82);
 }
 
+@media (max-width: 959px) {
+  .admin-help-launcher,
+  .admin-help-panel {
+    display: none !important;
+  }
+}
+
 @media (min-width: 960px) {
   .admin-help-page-content {
     grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr);
@@ -652,8 +660,62 @@ details[open] > .admin-expand-summary .admin-expand-caret {
 }
 
 @media (max-width: 767px) {
+  .admin-content {
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .admin-shell-banner {
+    align-items: flex-start;
+    gap: 0.2rem 0.6rem;
+    padding: 0.55rem 0.85rem;
+  }
+
+  .admin-shell-banner strong {
+    font-size: 0.68rem;
+  }
+
+  .admin-shell-banner span {
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+  }
+
+  .admin-toast-wrap {
+    top: 0.75rem;
+    width: calc(100vw - 1rem);
+  }
+
   .admin-help-mobile-entry {
     flex-direction: column;
     align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .admin-help-mobile-text {
+    max-width: none;
+  }
+
+  .admin-help-mobile-link {
+    width: 100%;
+  }
+
+  main[class*="max-w-3xl"],
+  main[class*="max-w-5xl"],
+  main[class*="max-w-6xl"],
+  main[class*="max-w-7xl"] {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  main > header h1 {
+    font-size: 2rem !important;
+    line-height: 1.1 !important;
+  }
+
+  .hero-mesh > section[class*="max-w-5xl"],
+  .hero-mesh > section[class*="max-w-6xl"] {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
   }
 }

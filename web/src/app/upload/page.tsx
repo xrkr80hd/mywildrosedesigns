@@ -21,12 +21,12 @@ export default async function UploadPage() {
   const options = await getUploadProductOptions();
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-10">
-      <header className="rounded-3xl border border-rose/20 bg-white/85 p-7">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+      <header className="rounded-2xl border border-rose/20 bg-white/85 p-5 sm:rounded-3xl sm:p-7">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">
           Custom Orders
         </p>
-        <h1 className="mt-2 text-4xl text-forest">Upload Your Design</h1>
+        <h1 className="mt-2 text-3xl text-forest sm:text-4xl">Upload Your Design</h1>
         <p className="mt-2 text-sm text-foreground/75">
           Send artwork, choose your print option, and complete secure payment in
           one flow.
