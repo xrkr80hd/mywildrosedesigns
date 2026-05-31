@@ -280,6 +280,28 @@ Verification:
 - Passed: `curl -sS -b /tmp/wrd-admin-cookies.txt http://localhost:3000/admin/help -o /tmp/wrd-admin-help-adhd.html -w 'GET /admin/help -> %{http_code}\n' --max-time 30` returned `200`
 - Passed initial render checks for `Start Here`, `Add or Edit Products`, `Sizes, Brands, Templates`, `Make a Bundle`, and `Orders, Content, Fixes`.
 
+## Mobile Tutorial Layout Fix
+
+- [x] The mobile/tablet help section picker no longer stacks as giant full-width blocks before the tutorial content.
+
+Completed behavior:
+
+- On phone/tablet widths, the tutorial section picker is now a compact horizontal row.
+- Long section summaries are hidden in the mobile picker and closed section rows.
+- Open tutorial content uses tighter spacing so the first useful instructions appear sooner.
+- Restarted the local Node server so stale tutorial content was cleared.
+
+Files changed:
+
+- `web/src/app/globals.css`
+
+Verification:
+
+- Passed: `cd web && npx eslint src/lib/admin-help-content.ts src/components/admin-help-content.tsx src/components/admin-help-shell.tsx src/app/admin/help/page.tsx`
+- Passed: `curl -sS -b /tmp/wrd-admin-cookies.txt http://localhost:3000/admin/help -o /tmp/wrd-admin-help-mobile-fix.html -w 'GET /admin/help -> %{http_code}\n' --max-time 30` returned `200`
+- Passed content checks for `Start Here`, `Add or Edit Products`, `Sizes, Brands, Templates`, `Make a Bundle`, and `Orders, Content, Fixes`.
+- Passed: `cd web && npm run build`
+
 ## Completed Feature Notes
 
 When a feature is actually finished, document it here with:

@@ -648,6 +648,94 @@ details[open] > .admin-expand-summary .admin-expand-caret {
   .admin-help-panel {
     display: none !important;
   }
+
+  .admin-help-page-content {
+    gap: 0.7rem;
+  }
+
+  .admin-help-toc-page {
+    position: static;
+    top: auto;
+    padding: 0.45rem;
+  }
+
+  .admin-help-toc-page > div:first-child {
+    display: none;
+  }
+
+  .admin-help-toc-page .admin-help-toc-list {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 0;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-help-toc-page .admin-help-toc-list-button {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 12rem;
+    padding: 0.48rem 0.62rem;
+    white-space: nowrap;
+  }
+
+  .admin-help-toc-page .admin-help-toc-list-button-title {
+    font-size: 0.76rem;
+  }
+
+  .admin-help-toc-page .admin-help-toc-list-button-summary {
+    display: none;
+  }
+
+  .admin-help-accordion-list {
+    gap: 0.55rem;
+  }
+
+  .admin-help-section-summary,
+  .admin-help-section-open-label {
+    display: none;
+  }
+
+  .admin-help-section-caret {
+    min-width: 1.2rem;
+  }
+
+  .admin-help-section-intro {
+    padding-top: 0.7rem;
+    font-size: 0.83rem;
+    line-height: 1.45;
+  }
+
+  .admin-help-link-row {
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+  }
+
+  .admin-help-inline-link {
+    padding: 0.5rem 0.62rem;
+    font-size: 0.74rem;
+  }
+
+  .admin-help-subsection-list {
+    gap: 0.6rem;
+    margin-top: 0.7rem;
+  }
+
+  .admin-help-subsection {
+    padding: 0.65rem 0.7rem;
+  }
+
+  .admin-help-subsection h3 {
+    font-size: 0.72rem;
+  }
+
+  .admin-help-subsection ul {
+    gap: 0.3rem;
+    margin-top: 0.45rem;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
 }
 
 @media (min-width: 960px) {
