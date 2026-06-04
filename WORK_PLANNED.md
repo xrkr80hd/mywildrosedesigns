@@ -238,6 +238,9 @@ Deferred until bundle workflow is functional.
 - [x] Confirm `/admin` loads real admin, not Local Preview Mode.
 - [x] Confirm Variant Inventory template UI renders in admin.
 - [ ] Confirm a real template can be created with a live admin form submission.
+- [x] Investigate why uploaded customer design files are not appearing in the expected Supabase storage bucket, without creating live test data unless explicitly approved.
+- [x] Add paid-order email notification for Johanna through the existing Stripe webhook without changing checkout behavior.
+- [x] Add an ADHD-friendly Customer Uploads inbox inside admin Orders and Uploads so Johanna can quickly find and download uploaded designs.
 - [ ] Confirm a real template can generate product variants with a live admin form submission.
 - [ ] Confirm bundle product can be created with a real admin form submission.
 - [ ] Confirm bundle product appears in Product Inventory.

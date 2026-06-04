@@ -425,6 +425,15 @@ function formatOrderNumber(orderId: string, createdAt: string): string {
   return `WRD-${ymd}-${token}`;
 }
 
+function hasCustomerUpload(order: OrderRow): boolean {
+  return Boolean(order.design_path && order.design_path !== "cart/no-upload");
+}
+
+function formatUploadFileName(designPath: string): string {
+  const fileName = designPath.split("/").pop();
+  return fileName || designPath;
+}
+
 function isMissingTableError(error: unknown, tableName: string): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -1078,6 +1087,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       : `/admin?orderView=${nextView}#orders-uploads`;
   const orderRedirectTo = (orderId?: string) =>
     `${orderViewBasePath}${orderId ? `#order-${orderId}` : "#orders-uploads"}`;
+  const customerUploadOrders = orders.filter(hasCustomerUpload);
   const popupDefaultMode: PopupCtaMode = popup.product_id
     ? "inventory"
     : "slug";
@@ -2570,6 +2580,101 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </div>
             </div>
           </div>
+          <section
+            id="customer-uploads-inbox"
+            className="rounded-xl border border-sky-200 bg-sky-50/70 p-4 shadow-sm"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-900">
+                  Customer Uploads
+                </p>
+                <h3 className="mt-1 text-xl text-forest">
+                  Download Designs Here
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-foreground/75">
+                  These are orders with customer files attached. Use this list
+                  first when Johanna needs the artwork.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm sm:flex sm:flex-wrap">
+                <span className="rounded-md bg-white px-3 py-2 font-semibold text-sky-950 ring-1 ring-sky-100">
+                  {customerUploadOrders.length} uploads
+                </span>
+                <span className="rounded-md bg-white px-3 py-2 font-semibold capitalize text-foreground/75 ring-1 ring-sky-100">
+                  {orderView} view
+                </span>
+              </div>
+            </div>
+
+            {customerUploadOrders.length === 0 ? (
+              <p className="mt-4 rounded-lg border border-sky-100 bg-white px-3 py-3 text-sm text-foreground/75">
+                No uploaded design files in this view.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-2">
+                {customerUploadOrders.map((order) => {
+                  const orderNumber = formatOrderNumber(
+                    order.id,
+                    order.created_at,
+                  );
+                  const fileName = formatUploadFileName(order.design_path);
+
+                  return (
+                    <article
+                      key={`upload-${order.id}`}
+                      className="grid gap-3 rounded-lg border border-sky-100 bg-white p-3 text-sm shadow-sm xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_auto] xl:items-center"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-forest">
+                          {order.customer_name}
+                        </p>
+                        <p className="mt-0.5 break-words text-xs text-foreground/70">
+                          {order.customer_email}
+                        </p>
+                        <p className="mt-1 text-[11px] font-semibold text-gold">
+                          Order #{orderNumber}
+                        </p>
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-semibold text-foreground">
+                          {fileName}
+                        </p>
+                        <p className="mt-0.5 text-xs text-foreground/65">
+                          {formatDateTime(order.created_at)} •{" "}
+                          {formatOrderStatusLabel(order.status)}
+                        </p>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 xl:min-w-64">
+                        {order.fileLink ? (
+                          <a
+                            href={order.fileLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex justify-center rounded-md bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest/90"
+                          >
+                            Download Design
+                          </a>
+                        ) : (
+                          <span className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-center text-xs font-semibold text-red-700">
+                            Link unavailable
+                          </span>
+                        )}
+                        <a
+                          href={orderRedirectTo(order.id)}
+                          className="inline-flex justify-center rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-900 hover:bg-sky-50"
+                        >
+                          Open Order
+                        </a>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
           {orders.length === 0 ? (
             <p className="rounded-2xl border border-rose/20 bg-white/75 px-4 py-6 text-sm">
               No orders in this view yet.

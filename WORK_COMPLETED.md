@@ -234,6 +234,100 @@ Known limitation:
 
 - The safe checkout API verification was intentionally non-destructive, so it only confirmed route reachability and current environment status; it did not create a live order or complete a Stripe session.
 
+## Design Upload Bucket Investigation
+
+- [x] Investigated why customer design uploads are not appearing for Johanna in admin.
+
+Findings:
+
+- The current upload flow writes files to the private Supabase `design-uploads` bucket, then stores the object path in `orders.design_path`.
+- Johanna's admin view is driven by `orders` rows and signed links for `orders.design_path`; it does not browse the bucket directly.
+- The connected Supabase project currently has no non-cart upload orders. Recent order rows all use `design_path = cart/no-upload`.
+- The `design-uploads` bucket contains two older dated files, but no matching upload order rows, so those files are orphaned from Johanna's admin view.
+- The site advertises PSD uploads, but the bucket MIME allow-list did not include common PSD MIME types.
+
+Files changed:
+
+- `web/src/app/api/checkout/route.ts`
+- `web/supabase/migrations/202606040001_allow_psd_design_uploads.sql`
+- `WORK_PLANNED.md`
+
+Verification:
+
+- Passed: read-only Supabase check confirmed bucket `design-uploads`, its MIME allow-list, recent order rows, and existing bucket prefixes.
+- Passed: live public page check confirmed `https://www.mywildrosedesigns.com/upload` is serving the current Next.js upload form.
+- Passed: live non-destructive `POST /api/checkout` with no form data returned normal validation, confirming production checkout reaches the route.
+- Passed: live Supabase storage bucket update via the storage API added PSD MIME types while keeping `design-uploads` private and at 50MB.
+- Passed: `npm --prefix web run lint -- src/app/api/checkout/route.ts`
+- Passed: `npm --prefix web run build`
+
+Known limitation:
+
+- No live upload order was submitted or paid during this pass, to avoid creating real customer/order data without explicit approval.
+- Stripe checkout session creation, webhook handling, cart checkout, and payment status logic were not changed.
+
+## Paid Order Email Notifications
+
+- [x] Paid-order email notification support is wired into the existing Stripe webhook.
+
+Completed behavior:
+
+- When Stripe sends a successful checkout event and the matching order first changes to `paid`, the webhook now attempts to send Johanna an order notification email.
+- Duplicate Stripe webhook deliveries do not resend the email if the order was already marked `paid`.
+- Email send failures are logged, but they do not fail the Stripe webhook or undo the paid order.
+- Upload orders include a 24-hour signed download link when `orders.design_path` points at a real upload file.
+- Cart orders still send the order details, but show that no upload link is available.
+- Notification email formatting is isolated in a small helper with a focused Node test.
+
+Files changed:
+
+- `web/src/app/api/webhooks/stripe/route.ts`
+- `web/src/lib/env.ts`
+- `web/src/lib/order-notification-email.ts`
+- `web/src/lib/order-notifications.ts`
+- `web/test/order-notification-email.test.mjs`
+- `web/.env.example`
+- `.env.example`
+- `web/STRIPE_LIVE_CUTOVER.md`
+- `WORK_PLANNED.md`
+
+Verification:
+
+- Passed: `node --test web/test/order-notification-email.test.mjs`
+- Passed: `npm --prefix web run lint -- src/app/api/webhooks/stripe/route.ts src/lib/env.ts src/lib/order-notification-email.ts src/lib/order-notifications.ts`
+- Passed: `npm --prefix web run build`
+
+Known limitation:
+
+- Production email sending requires Vercel environment variables: `RESEND_API_KEY`, `ORDER_NOTIFICATION_EMAIL`, and optionally `ORDER_NOTIFICATION_FROM`.
+- No live Stripe payment or real notification email was sent during this pass.
+
+## Customer Uploads Inbox
+
+- [x] Admin now has a clearer Customer Uploads inbox inside the existing Orders and Uploads section.
+
+Completed behavior:
+
+- Added `Customer Uploads` near the top of `Orders and Uploads`.
+- The inbox uses the current order view filter, so Active/Archived/Fulfilled/All stays consistent with the rest of admin.
+- Only orders with real uploaded files are shown; cart orders with `cart/no-upload` stay out of the upload list.
+- Each upload row shows customer name, customer email, order number, file name, created date, and order status.
+- Each upload row has a clear `Download Design` button using the existing private signed upload link.
+- Each upload row has an `Open Order` link so Johanna can jump to the full order card when she needs details or status controls.
+- The existing order cards and `Download Upload` link remain available.
+
+Files changed:
+
+- `web/src/app/admin/page.tsx`
+- `WORK_PLANNED.md`
+
+Verification:
+
+- Passed: `npm --prefix web run lint -- src/app/admin/page.tsx`
+- Passed: `npm --prefix web run build`
+- Passed: local authenticated `GET /admin` returned `200`.
+- Passed: rendered admin HTML contains `Customer Uploads`, `Download Designs Here`, `Download Design`, and `No uploaded design files`.
+
 ## Admin Tutorial Refresh
 
 - [x] The admin tutorial now matches the updated inventory/content workflow and is more usable on mobile.

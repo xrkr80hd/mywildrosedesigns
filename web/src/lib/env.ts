@@ -51,6 +51,26 @@ export function hasStripeWebhookSecret(): boolean {
   return hasEnvValue("STRIPE_WEBHOOK_SECRET");
 }
 
+export function getOrderNotificationEmailEnv() {
+  const recipients = (process.env.ORDER_NOTIFICATION_EMAIL ?? "")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+
+  return {
+    resendApiKey: process.env.RESEND_API_KEY ?? "",
+    recipients,
+    from:
+      process.env.ORDER_NOTIFICATION_FROM ??
+      "Wild Rose Designs <onboarding@resend.dev>",
+  };
+}
+
+export function hasOrderNotificationEmailEnv(): boolean {
+  const { resendApiKey, recipients } = getOrderNotificationEmailEnv();
+  return Boolean(resendApiKey.trim() && recipients.length > 0);
+}
+
 export function getAdminCredentials() {
   return {
     username: process.env.ADMIN_USERNAME ?? "",

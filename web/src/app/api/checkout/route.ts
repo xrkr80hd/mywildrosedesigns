@@ -11,9 +11,47 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 
 const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_UPLOAD_EXTENSIONS = new Set([
+  "ai",
+  "eps",
+  "jpeg",
+  "jpg",
+  "pdf",
+  "png",
+  "psd",
+  "svg",
+  "webp",
+]);
+const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  "application/octet-stream",
+  "application/pdf",
+  "application/postscript",
+  "application/psd",
+  "application/vnd.adobe.illustrator",
+  "application/x-photoshop",
+  "image/jpeg",
+  "image/png",
+  "image/svg+xml",
+  "image/vnd.adobe.photoshop",
+  "image/webp",
+]);
 
 function sanitizeFileName(fileName: string): string {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function getFileExtension(fileName: string): string {
+  const extension = fileName.split(".").pop();
+  return extension ? extension.toLowerCase() : "";
+}
+
+function isAllowedUploadFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  const mimeType = file.type.toLowerCase();
+  return (
+    ALLOWED_UPLOAD_EXTENSIONS.has(extension) &&
+    (!mimeType || ALLOWED_UPLOAD_MIME_TYPES.has(mimeType))
+  );
 }
 
 function getBaseUrlFromRequest(request: Request): string {
@@ -73,6 +111,13 @@ export async function POST(request: Request) {
     if (designFile.size <= 0 || designFile.size > MAX_UPLOAD_SIZE_BYTES) {
       return NextResponse.json(
         { error: "File size must be between 1 byte and 50MB." },
+        { status: 400 },
+      );
+    }
+
+    if (!isAllowedUploadFile(designFile)) {
+      return NextResponse.json(
+        { error: "Accepted file types are PNG, JPG, WEBP, SVG, PDF, AI, EPS, and PSD." },
         { status: 400 },
       );
     }

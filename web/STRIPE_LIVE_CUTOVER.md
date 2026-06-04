@@ -7,6 +7,9 @@ Set these in the `web` project:
 - `STRIPE_SECRET_KEY` = your live secret key (`sk_live_...`)
 - `STRIPE_WEBHOOK_SECRET` = webhook signing secret for your live endpoint (`whsec_...`)
 - `NEXT_PUBLIC_SITE_URL` = your live domain (for example `https://wildrosedesigns.com`)
+- `RESEND_API_KEY` = Resend API key for order notification email
+- `ORDER_NOTIFICATION_EMAIL` = Johanna's notification email address
+- `ORDER_NOTIFICATION_FROM` = sender address, for example `Wild Rose Designs <orders@yourdomain.com>`
 
 ## 2) Stripe Dashboard webhook (Live mode)
 
@@ -36,7 +39,8 @@ Copy endpoint signing secret into `STRIPE_WEBHOOK_SECRET`.
 3. Complete payment.
 4. Verify order row status becomes `paid` in Supabase `orders`.
 5. Confirm `stripe_payment_intent_id` is populated.
-6. Test an abandoned/expired session and confirm status moves to `cancelled`.
+6. Confirm Johanna receives the paid-order email notification.
+7. Test an abandoned/expired session and confirm status moves to `cancelled`.
 
 ## 5) Rollback safety
 

@@ -6,6 +6,7 @@ import {
   hasStripeWebhookSecret,
 } from "@/lib/env";
 import { recordFunnelEvent } from "@/lib/funnel-analytics";
+import { sendPaidOrderNotification } from "@/lib/order-notifications";
 import { recordSaleMovementsForOrder } from "@/lib/order-sales";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -36,14 +37,21 @@ async function getOrderIdForSession(session: Stripe.Checkout.Session): Promise<s
   return lookup.data?.id ?? null;
 }
 
-async function markOrderPaid(session: Stripe.Checkout.Session) {
+type PaidOrderResult = {
+  orderId: string;
+  shouldNotify: boolean;
+};
+
+async function markOrderPaid(
+  session: Stripe.Checkout.Session,
+): Promise<PaidOrderResult | null> {
   const orderId = await getOrderIdForSession(session);
   if (!orderId) {
-    return;
+    return null;
   }
 
   if (session.payment_status !== "paid") {
-    return;
+    return null;
   }
 
   const supabase = getSupabaseAdminClient();
@@ -89,6 +97,11 @@ async function markOrderPaid(session: Stripe.Checkout.Session) {
   } catch (analyticsError) {
     console.error("Unable to record paid analytics event", analyticsError);
   }
+
+  return {
+    orderId,
+    shouldNotify: !isAlreadyPaid,
+  };
 }
 
 async function markOrderCancelled(session: Stripe.Checkout.Session) {
@@ -136,9 +149,19 @@ export async function POST(request: Request) {
 
     switch (event.type) {
       case "checkout.session.completed":
-      case "checkout.session.async_payment_succeeded":
-        await markOrderPaid(event.data.object as Stripe.Checkout.Session);
+      case "checkout.session.async_payment_succeeded": {
+        const paidOrder = await markOrderPaid(
+          event.data.object as Stripe.Checkout.Session,
+        );
+        if (paidOrder?.shouldNotify) {
+          try {
+            await sendPaidOrderNotification(paidOrder.orderId);
+          } catch (notificationError) {
+            console.error("Unable to send paid order notification", notificationError);
+          }
+        }
         break;
+      }
       case "checkout.session.async_payment_failed":
       case "checkout.session.expired":
         await markOrderCancelled(event.data.object as Stripe.Checkout.Session);
