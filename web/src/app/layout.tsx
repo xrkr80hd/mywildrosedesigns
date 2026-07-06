@@ -1,6 +1,9 @@
+import { SiteShell } from "@/components/site-shell";
+import { VisitAlertPing } from "@/components/visit-alert-ping";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
-import { SiteShell } from "@/components/site-shell";
 import "./globals.css";
 
 const headingFont = Cormorant_Garamond({
@@ -87,6 +90,9 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
         <SiteShell>{children}</SiteShell>
+        <VisitAlertPing />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

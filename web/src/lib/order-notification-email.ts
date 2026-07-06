@@ -65,8 +65,8 @@ export function buildOrderNotificationEmail(order: OrderNotificationDetails) {
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#2f2a2a;">
       <h1 style="margin:0 0 12px;color:#365142;font-size:24px;">New paid order #${escapeHtml(
-        orderNumber,
-      )}</h1>
+    orderNumber,
+  )}</h1>
       <p style="margin:0 0 18px;">A customer payment just completed in Stripe.</p>
       <table style="border-collapse:collapse;width:100%;max-width:680px;background:#fffaf7;border:1px solid #ead6d6;">
         <tbody>
@@ -106,6 +106,49 @@ export function buildOrderNotificationEmail(order: OrderNotificationDetails) {
 
   return {
     subject: `New paid order #${orderNumber} - ${order.customer_name}`,
+    html,
+    text,
+  };
+}
+
+export function buildCustomerOrderConfirmationEmail(order: OrderNotificationDetails) {
+  const orderNumber = formatOrderNumber(order);
+  const safeCustomerName = escapeHtml(order.customer_name);
+  const total = formatUsd(order.amount_cents);
+  const paidAt = formatDateTime(order.paid_at);
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#2f2a2a;">
+      <h1 style="margin:0 0 12px;color:#365142;font-size:24px;">Thanks for your order, ${safeCustomerName}.</h1>
+      <p style="margin:0 0 18px;">Your payment was received and your order is now in our production queue.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:640px;background:#fffaf7;border:1px solid #ead6d6;">
+        <tbody>
+          ${detailRow("Order #", escapeHtml(orderNumber))}
+          ${detailRow("Order total", escapeHtml(total))}
+          ${detailRow("Payment status", "Paid")}
+          ${detailRow("Paid at", escapeHtml(paidAt))}
+        </tbody>
+      </table>
+      <p style="margin:18px 0 0;">If we need anything else before printing, we will email you at ${escapeHtml(
+    order.customer_email,
+  )}.</p>
+      <p style="margin:8px 0 0;">Thank you for choosing Wild Rose Designs.</p>
+    </div>
+  `;
+
+  const text = [
+    `Thanks for your order, ${order.customer_name}.`,
+    "Your payment was received and your order is now in our production queue.",
+    `Order #: ${orderNumber}`,
+    `Order total: ${total}`,
+    "Payment status: Paid",
+    `Paid at: ${paidAt}`,
+    `We will contact you at ${order.customer_email} if we need any additional details before printing.`,
+    "Thank you for choosing Wild Rose Designs.",
+  ].join("\n");
+
+  return {
+    subject: `Order confirmation #${orderNumber} - Wild Rose Designs`,
     html,
     text,
   };

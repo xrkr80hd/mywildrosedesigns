@@ -71,6 +71,16 @@ export function hasOrderNotificationEmailEnv(): boolean {
   return Boolean(resendApiKey.trim() && recipients.length > 0);
 }
 
+export function hasCustomerOrderConfirmationEmailEnv(): boolean {
+  const confirmationsEnabled =
+    (process.env.CUSTOMER_ORDER_CONFIRMATION_ENABLED ?? "true")
+      .trim()
+      .toLowerCase() !== "false";
+
+  const { resendApiKey, from } = getOrderNotificationEmailEnv();
+  return Boolean(confirmationsEnabled && resendApiKey.trim() && from.trim());
+}
+
 export function getAdminCredentials() {
   return {
     username: process.env.ADMIN_USERNAME ?? "",

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { sendAlert } from "@/lib/alerts";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 
@@ -52,5 +53,27 @@ export async function recordFunnelEvent(input: RecordFunnelEventInput): Promise<
 
   if (insertResult.error) {
     throw new Error(insertResult.error.message);
+  }
+
+  const alertResult = await sendAlert({
+    eventType: `funnel_${input.eventType}`,
+    message: `Funnel event: ${input.eventType}`,
+    path: input.sourcePath ?? undefined,
+    metadata: {
+      sessionId: input.sessionId ?? null,
+      productId: input.productId ?? null,
+      productSlug: input.productSlug ?? null,
+      variantId: input.variantId ?? null,
+      orderId: input.orderId ?? null,
+      cartSize: input.cartSize ?? null,
+      ...((input.metadata ?? {}) as Record<string, unknown>),
+    },
+  });
+
+  if (!alertResult.sent && alertResult.reason === "request_failed") {
+    console.error("Unable to send funnel alert webhook event", {
+      eventType: input.eventType,
+      sourcePath: input.sourcePath ?? null,
+    });
   }
 }

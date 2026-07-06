@@ -1,11 +1,12 @@
 import "server-only";
 
-import { unstable_noStore as noStore } from "next/cache";
+import { hasSupabaseServerEnv } from "@/lib/env";
 import {
   DEFAULT_PRODUCT_OPTIONS,
   ProductOption,
 } from "@/lib/product-options";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { unstable_noStore as noStore } from "next/cache";
 
 type ProductOptionRow = {
   id: string;
@@ -84,6 +85,10 @@ export async function getUploadProductOptionsForAdmin(): Promise<ProductOptionAd
   }
 
   const defaults = defaultAdminRows();
+  if (!hasSupabaseServerEnv()) {
+    return defaults;
+  }
+
   const supabase = getSupabaseAdminClient();
   const result = await supabase
     .from("upload_product_options")

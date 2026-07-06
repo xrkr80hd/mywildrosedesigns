@@ -261,3 +261,11 @@ Deferred until bundle workflow is functional.
 - Admin bypass is enabled locally with `ADMIN_BYPASS_AUTH=true`.
 - Dev server command: `cd web && npm run dev`.
 - Admin URL: `http://localhost:3000/admin`.
+
+## Notification Rollout Pending
+
+- [ ] Set production env vars in Vercel for alerts and email notifications.
+- [ ] Confirm `ORDER_NOTIFICATION_EMAIL` points to Johannah's preferred mailbox.
+- [ ] Configure `ALERT_WEBHOOK_URL` receiver and test payload delivery.
+- [ ] Configure Stripe webhook endpoint for `/api/webhooks/stripe` in production.
+- [ ] Run one real paid checkout in production to confirm owner + customer emails.

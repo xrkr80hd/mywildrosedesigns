@@ -1,15 +1,18 @@
-import { NextResponse } from "next/server";
-import Stripe from "stripe";
 import {
   getStripeServerEnv,
   hasStripeSecretKey,
   hasStripeWebhookSecret,
 } from "@/lib/env";
 import { recordFunnelEvent } from "@/lib/funnel-analytics";
-import { sendPaidOrderNotification } from "@/lib/order-notifications";
+import {
+  sendCustomerPaidOrderConfirmation,
+  sendPaidOrderNotification,
+} from "@/lib/order-notifications";
 import { recordSaleMovementsForOrder } from "@/lib/order-sales";
 import { getStripeServerClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { NextResponse } from "next/server";
+import Stripe from "stripe";
 
 export const runtime = "nodejs";
 
@@ -158,6 +161,15 @@ export async function POST(request: Request) {
             await sendPaidOrderNotification(paidOrder.orderId);
           } catch (notificationError) {
             console.error("Unable to send paid order notification", notificationError);
+          }
+
+          try {
+            await sendCustomerPaidOrderConfirmation(paidOrder.orderId);
+          } catch (notificationError) {
+            console.error(
+              "Unable to send customer paid order confirmation",
+              notificationError,
+            );
           }
         }
         break;

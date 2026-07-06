@@ -450,3 +450,40 @@ When a feature is actually finished, document it here with:
 - Database migrations added/applied.
 - Verification commands run.
 - Known limitations, if any.
+
+## Alerts + Notification Coverage
+
+- [x] Added webhook alert support for tracked page visits and shopping funnel events.
+- [x] Added owner paid-order email notifications and customer paid-order confirmation emails.
+
+Completed behavior:
+
+- Added `sendAlert` webhook utility with owner email fallback (`mywildrosedesignsllc@gmail.com`).
+- Added `/api/alerts/visit` endpoint with cookie-based throttling and tracked paths.
+- Added a client route ping component mounted in root layout for tracked page visits.
+- Added funnel event webhook alerts for `view_product`, `add_to_cart`, `start_checkout`, and `paid` events.
+- Added customer payment confirmation email template and send path using Resend.
+- Wired Stripe webhook paid flow to send both owner and customer emails.
+- Added env documentation for alert webhook and customer confirmation toggles.
+
+Files changed:
+
+- `web/src/lib/alerts.ts`
+- `web/src/app/api/alerts/visit/route.ts`
+- `web/src/components/visit-alert-ping.tsx`
+- `web/src/app/layout.tsx`
+- `web/src/lib/funnel-analytics.ts`
+- `web/src/lib/order-notification-email.ts`
+- `web/src/lib/order-notifications.ts`
+- `web/src/app/api/webhooks/stripe/route.ts`
+- `web/src/lib/env.ts`
+- `web/.env.example`
+
+Verification:
+
+- Passed: `cd web && npm run build`.
+- Verified route list includes `/api/alerts/visit` and `/api/webhooks/stripe`.
+
+Known limitation:
+
+- Live delivery still requires production `ALERT_WEBHOOK_URL`, Stripe webhook setup, and valid Resend + email env values in Vercel.

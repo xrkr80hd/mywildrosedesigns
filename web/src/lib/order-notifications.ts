@@ -1,9 +1,11 @@
 import {
   getOrderNotificationEmailEnv,
   getUploadBucket,
+  hasCustomerOrderConfirmationEmailEnv,
   hasOrderNotificationEmailEnv,
 } from "@/lib/env";
 import {
+  buildCustomerOrderConfirmationEmail,
   buildOrderNotificationEmail,
   type OrderNotificationDetails,
 } from "@/lib/order-notification-email";
@@ -76,6 +78,50 @@ export async function sendPaidOrderNotification(
     body: JSON.stringify({
       from,
       to: recipients,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ResendResponse | null;
+    throw new Error(
+      payload?.message ?? `Resend email request failed with ${response.status}`,
+    );
+  }
+
+  return { sent: true };
+}
+
+export async function sendCustomerPaidOrderConfirmation(
+  orderId: string,
+): Promise<NotificationResult> {
+  if (!hasCustomerOrderConfirmationEmailEnv()) {
+    return { sent: false, reason: "disabled" };
+  }
+
+  const order = await getOrderForNotification(orderId);
+  if (!order) {
+    return { sent: false, reason: "missing_order" };
+  }
+
+  const customerEmail = order.customer_email.trim();
+  if (!customerEmail) {
+    return { sent: false, reason: "missing_order" };
+  }
+
+  const { resendApiKey, from } = getOrderNotificationEmailEnv();
+  const email = buildCustomerOrderConfirmationEmail(order);
+  const response = await fetch(RESEND_EMAIL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [customerEmail],
       subject: email.subject,
       html: email.html,
       text: email.text,
