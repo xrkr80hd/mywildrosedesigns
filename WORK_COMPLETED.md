@@ -487,3 +487,15 @@ Verification:
 Known limitation:
 
 - Live delivery still requires production `ALERT_WEBHOOK_URL`, Stripe webhook setup, and valid Resend + email env values in Vercel.
+
+
+## Website Studio and pickup-first checkout — 2026-10-10
+
+- Added authenticated discount-code management using existing Stripe promotion codes or uniquely named coupons. Registered `treatyourself` against live Stripe coupon `ztIV16of` ($4 USD off); no new coupon or test order created. Removed website codes are rejected before creating orders or uploading files.
+- Defaulted cart, standard checkout and custom upload fulfillment to Local Pickup; shipping remains available. Stripe validates discounts server-side, and webhook records actual paid totals including fully discounted sessions.
+- Added curated body/heading font controls with bounded sizes, preview and original-style reset. Added media collection upload, preview, replacement, removal and logo/hero assignment using existing Supabase storage. Removal preserves shared physical files.
+- Simplified admin entry points and refreshed storefront hero/layout while retaining existing content, products, variants and ordering flows.
+- Verified production build, TypeScript, targeted lint, whitespace checks, all 14 tests, and local HTTP route smoke checks. Preview deployment built successfully. Live payment and admin form mutation tests were intentionally not performed; no live test inventory, customer or order data created.
+
+- Production deployment `dpl_4UGpRQtjwCypmGvPcBRKCDKrdT8Q` reached READY with main commit `4133f055848856ad3c2acbd3fa45e919ad1f259c`. Live browser verified homepage images, real product add-to-cart, pickup $13 total and explicit shipping $18.99 total for the $13 product, discount input, and custom upload default pickup. Verification cart cleared; no checkout submitted. Protected admin routes redirect to login; no deployment error logs observed.
+- Browser screenshot review covered desktop; mobile rendering and authenticated live admin save/upload were not exercised. Prior production deployment `dpl_GLxQQFTzmZ4cufyMEVAw81wzHWGG` remains available for rollback.

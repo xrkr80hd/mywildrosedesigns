@@ -271,11 +271,11 @@ Deferred until bundle workflow is functional.
 - [ ] Run one real paid checkout in production to confirm owner + customer emails.
 
 ## Discount handler
-- [ ] Link existing Stripe promotion code in admin, optional automatic application, retain customer code entry.
-- [ ] Verify checkout configuration, auth, lint and build.
+- [x] Link existing Stripe codes/coupons in admin and retain customer code entry.
+- [x] Verify checkout configuration, auth, lint and build.
 
 ## Authorized website update
-- [ ] Website discount registry including named Stripe coupons; add/remove via admin.
-- [ ] Pickup default in cart, checkout and upload flow.
-- [ ] Font editor, media manager and modern visual styling.
-- [ ] Validate routes, pricing, auth and production deployment.
+- [x] Website discount registry including named Stripe coupons; add/remove via admin.
+- [x] Pickup default in cart, checkout and upload flow.
+- [x] Font editor, media manager and modern visual styling.
+- [x] Validate routes, pricing, auth and production deployment.
