@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChangeEvent, DragEvent, useId, useRef, useState } from "react";
 
 type UploadResponse = {
@@ -14,6 +15,7 @@ type AdminImageUploadFieldProps = {
   recommendedSize?: string;
   helperText?: string;
   className?: string;
+  showPreview?: boolean;
 };
 
 export function AdminImageUploadField({
@@ -23,6 +25,7 @@ export function AdminImageUploadField({
   recommendedSize = "1200 x 1200 px square",
   helperText = "Drag and drop an image, or click to choose a file.",
   className,
+  showPreview = false,
 }: AdminImageUploadFieldProps) {
   const [value, setValue] = useState(defaultValue);
   const [isUploading, setIsUploading] = useState(false);
@@ -127,6 +130,8 @@ export function AdminImageUploadField({
         onChange={onInputChange}
         className="hidden"
       />
+
+      {showPreview && (value.startsWith("/assets/") || /^https:\/\/[^/]+\.supabase\.(co|in)\//.test(value)) ? <Image src={value} alt="Uploaded image preview" width={400} height={300} className="mt-3 h-48 w-full object-contain" /> : null}
 
       {error ? <p className="mt-1 text-xs font-semibold text-red-700">{error}</p> : null}
     </div>

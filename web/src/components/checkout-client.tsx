@@ -43,7 +43,7 @@ export function CheckoutClient() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [shippingMethod, setShippingMethod] = useState<"shipping" | "pickup">("shipping");
+  const [shippingMethod, setShippingMethod] = useState<"shipping" | "pickup">("pickup");
 
   useEffect(() => {
     setItems(loadItems());
@@ -91,6 +91,7 @@ export function CheckoutClient() {
       customerName: String(formData.get("customerName") ?? ""),
       customerEmail: String(formData.get("customerEmail") ?? ""),
       customerPhone: String(formData.get("customerPhone") ?? ""),
+      discountCode: String(formData.get("discountCode") ?? ""),
       notes: String(formData.get("notes") ?? ""),
       shippingMethod,
       items: items.map((item) => ({
@@ -187,6 +188,12 @@ export function CheckoutClient() {
             />
           </label>
 
+          <label className="block space-y-1">
+            <span className="text-sm font-semibold text-forest">Discount code (optional)</span>
+            <input name="discountCode" maxLength={200} autoComplete="off" className="w-full border border-rose/20 px-3 py-2" />
+            <span className="block text-xs">Your discount will appear on the secure payment screen.</span>
+          </label>
+
           <label className="space-y-1">
             <span className="text-sm font-semibold text-forest">Order Notes (optional)</span>
             <textarea
@@ -198,33 +205,15 @@ export function CheckoutClient() {
             />
           </label>
 
-          <fieldset className="space-y-2 rounded-xl border border-rose/20 bg-surface/70 p-3">
-            <legend className="px-1 text-sm font-semibold text-forest">Delivery Method</legend>
-            <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-rose/20 bg-white px-3 py-2 text-sm">
-              <span>Shipping</span>
-              <span className="flex items-center gap-2 font-semibold text-forest">
-                {formatUsd(SHIPPING)}
-                <input
-                  type="radio"
-                  name="shippingMethod"
-                  value="shipping"
-                  checked={shippingMethod === "shipping"}
-                  onChange={() => setShippingMethod("shipping")}
-                />
-              </span>
+          <fieldset className="delivery-options">
+            <legend>How would you like your order?</legend>
+            <label className={`delivery-card ${shippingMethod === "pickup" ? "is-selected" : ""}`}>
+              <input type="radio" name="shippingMethod" value="pickup" checked={shippingMethod === "pickup"} onChange={() => setShippingMethod("pickup")} />
+              <span><strong>Local Pickup</strong><small>Pick up locally · No delivery charge</small></span><b>FREE</b>
             </label>
-            <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-rose/20 bg-white px-3 py-2 text-sm">
-              <span>Local Pickup</span>
-              <span className="flex items-center gap-2 font-semibold text-forest">
-                {formatUsd(0)}
-                <input
-                  type="radio"
-                  name="shippingMethod"
-                  value="pickup"
-                  checked={shippingMethod === "pickup"}
-                  onChange={() => setShippingMethod("pickup")}
-                />
-              </span>
+            <label className={`delivery-card ${shippingMethod === "shipping" ? "is-selected" : ""}`}>
+              <input type="radio" name="shippingMethod" value="shipping" checked={shippingMethod === "shipping"} onChange={() => setShippingMethod("shipping")} />
+              <span><strong>Ship to me</strong><small>Delivered to your US address</small></span><b>{formatUsd(SHIPPING)}</b>
             </label>
           </fieldset>
 

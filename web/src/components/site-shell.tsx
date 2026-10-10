@@ -1,7 +1,8 @@
-﻿import { MobileSiteNav } from "@/components/mobile-site-nav";
+import { MobileSiteNav } from "@/components/mobile-site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { getSiteContentSettings } from "@/lib/site-content";
 import Image from "next/image";
+import { getMediaRegistry, mediaSlotUrl } from "@/lib/media-management";
 import Link from "next/link";
 
 const navLinks = [
@@ -13,7 +14,7 @@ const navLinks = [
 ];
 
 export async function SiteShell({ children }: { children: React.ReactNode }) {
-  const content = await getSiteContentSettings();
+  const [content, media] = await Promise.all([getSiteContentSettings(), getMediaRegistry()]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -24,7 +25,7 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
             className="group inline-flex min-w-0 flex-1 items-center gap-2 sm:gap-3"
           >
             <Image
-              src="/assets/img/MyWRDLogo.png"
+              src={mediaSlotUrl(media, "logo")}
               alt="Wild Rose Designs"
               width={40}
               height={40}

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CART_KEY, CartItem, formatVariantLabel, sanitizeCartItems } from "@/lib/cart";
 
-const SHIPPING = 5.99;
 
 function formatUsd(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -62,7 +61,7 @@ export function CartClient() {
     () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [items],
   );
-  const total = subtotal + (items.length > 0 ? SHIPPING : 0);
+  const total = subtotal;
 
   if (!items.length) {
     return (
@@ -138,8 +137,8 @@ export function CartClient() {
             <span>{formatUsd(subtotal)}</span>
           </div>
           <div className="flex justify-between">
-            <span>Shipping</span>
-            <span>{formatUsd(SHIPPING)}</span>
+            <span>Local Pickup</span>
+            <span>Free</span>
           </div>
           <div className="flex justify-between border-t border-rose/20 pt-2 text-base font-semibold">
             <span>Total</span>

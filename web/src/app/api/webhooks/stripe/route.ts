@@ -53,7 +53,7 @@ async function markOrderPaid(
     return null;
   }
 
-  if (session.payment_status !== "paid") {
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
     return null;
   }
 
@@ -75,6 +75,7 @@ async function markOrderPaid(
       .from("orders")
       .update({
         status: "paid",
+        ...(typeof session.amount_total === "number" ? { amount_cents: session.amount_total } : {}),
         paid_at: new Date().toISOString(),
         stripe_payment_intent_id:
           typeof session.payment_intent === "string" ? session.payment_intent : null,

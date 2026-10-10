@@ -1,3 +1,4 @@
+import { DiscountCodeError, getCheckoutDiscountOptions } from "@/lib/checkout-discounts";
 import { NextResponse } from "next/server";
 import {
   cartCheckoutRequestSchema,
@@ -67,6 +68,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const discountOptions = await getCheckoutDiscountOptions(parsed.data.discountCode);
 
     const lineItemsByKey = new Map<
       string,
@@ -267,7 +270,7 @@ export async function POST(request: Request) {
       (sum, item) => sum + item.unitAmountCents * item.quantity,
       0,
     );
-    const shippingMethod = parsed.data.shippingMethod === "pickup" ? "pickup" : "shipping";
+    const shippingMethod = parsed.data.shippingMethod === "shipping" ? "shipping" : "pickup";
     const shippingCents = shippingMethod === "shipping" ? SHIPPING_CENTS : 0;
     const totalQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
     const totalCents = subtotalCents + shippingCents;
@@ -362,7 +365,7 @@ export async function POST(request: Request) {
         shipping_method: shippingMethod,
       },
       line_items: lineItems,
-      allow_promotion_codes: true,
+      ...discountOptions,
     });
 
     if (!session.url) {
@@ -398,6 +401,7 @@ export async function POST(request: Request) {
       await supabase.from("orders").delete().eq("id", createdOrderId).eq("status", "pending_payment");
     }
 
+    if (error instanceof DiscountCodeError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Cart checkout initialization failed", error);
     return NextResponse.json(
       { error: "Unable to start checkout right now. Please try again." },

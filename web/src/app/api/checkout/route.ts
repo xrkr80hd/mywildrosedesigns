@@ -1,3 +1,4 @@
+import { DiscountCodeError, getCheckoutDiscountOptions } from "@/lib/checkout-discounts";
 import { NextResponse } from "next/server";
 import {
   checkoutRequestSchema,
@@ -90,7 +91,9 @@ export async function POST(request: Request) {
       customerPhone: formData.get("customerPhone"),
       productOptionId: formData.get("productOptionId"),
       quantity: formData.get("quantity"),
+      shippingMethod: formData.get("shippingMethod") ?? "pickup",
       notes: formData.get("notes"),
+      discountCode: formData.get("discountCode") ?? "",
     });
 
     if (!parsedPayload.success) {
@@ -99,6 +102,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const discountOptions = await getCheckoutDiscountOptions(parsedPayload.data.discountCode);
 
     const designFile = formData.get("designFile");
     if (!(designFile instanceof File)) {
@@ -149,7 +154,7 @@ export async function POST(request: Request) {
         customer_name: parsedPayload.data.customerName,
         customer_email: parsedPayload.data.customerEmail,
         customer_phone: normalizeOptionalText(parsedPayload.data.customerPhone),
-        notes: normalizeOptionalText(parsedPayload.data.notes),
+        notes: [normalizeOptionalText(parsedPayload.data.notes), `Fulfillment: ${parsedPayload.data.shippingMethod === "shipping" ? "Shipping" : "Local Pickup"}`].filter(Boolean).join("\n\n"),
         product_option: selectedOption.id,
         quantity: parsedPayload.data.quantity,
         amount_cents: amountCents,
@@ -171,9 +176,7 @@ export async function POST(request: Request) {
       mode: "payment",
       customer_email: parsedPayload.data.customerEmail,
       billing_address_collection: "required",
-      shipping_address_collection: {
-        allowed_countries: ["US"],
-      },
+      ...(parsedPayload.data.shippingMethod === "shipping" ? { shipping_address_collection: { allowed_countries: ["US" as const] } } : {}),
       automatic_tax: {
         enabled: true,
       },
@@ -182,6 +185,7 @@ export async function POST(request: Request) {
       metadata: {
         order_id: orderId,
         product_option: selectedOption.id,
+        shipping_method: parsedPayload.data.shippingMethod,
       },
       line_items: [
         {
@@ -196,7 +200,7 @@ export async function POST(request: Request) {
           },
         },
       ],
-      allow_promotion_codes: true,
+      ...discountOptions,
     });
 
     if (!session.url) {
@@ -226,6 +230,7 @@ export async function POST(request: Request) {
       await supabase.storage.from(bucket).remove([uploadedFilePath]);
     }
 
+    if (error instanceof DiscountCodeError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Checkout initialization failed", error);
     return NextResponse.json(
       { error: "Unable to start checkout right now. Please try again." },

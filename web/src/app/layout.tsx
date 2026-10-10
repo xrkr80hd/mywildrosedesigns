@@ -1,3 +1,5 @@
+import { getAppearance } from "@/lib/appearance";
+import { AppearanceScope } from "@/components/appearance-scope";
 import { SiteShell } from "@/components/site-shell";
 import { VisitAlertPing } from "@/components/visit-alert-ping";
 import { Analytics } from "@vercel/analytics/react";
@@ -77,7 +79,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -89,7 +91,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
-        <SiteShell>{children}</SiteShell>
+        <AppearanceScope appearance={await getAppearance()}><SiteShell>{children}</SiteShell></AppearanceScope>
         <VisitAlertPing />
         <Analytics />
         <SpeedInsights />

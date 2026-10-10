@@ -4,8 +4,10 @@ export const checkoutRequestSchema = z.object({
   customerName: z.string().trim().min(2).max(120),
   customerEmail: z.string().trim().email(),
   customerPhone: z.string().trim().max(30).optional(),
+  shippingMethod: z.enum(["shipping", "pickup"]).optional().default("pickup"),
   productOptionId: z.string().trim().min(1).max(120),
   quantity: z.coerce.number().int().min(1).max(25),
+  discountCode: z.string().trim().max(200).optional(),
   notes: z.string().trim().max(2000).optional(),
 });
 
@@ -22,8 +24,9 @@ export const cartCheckoutRequestSchema = z.object({
   customerName: z.string().trim().min(2).max(120),
   customerEmail: z.string().trim().email(),
   customerPhone: z.string().trim().max(30).optional(),
+  discountCode: z.string().trim().max(200).optional(),
   notes: z.string().trim().max(2000).optional(),
-  shippingMethod: z.enum(["shipping", "pickup"]).optional().default("shipping"),
+  shippingMethod: z.enum(["shipping", "pickup"]).optional().default("pickup"),
   items: z.array(cartCheckoutItemSchema).min(1).max(100),
 });
 

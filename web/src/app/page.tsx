@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getMediaRegistry, mediaSlotUrl } from "@/lib/media-management";
 import Image from "next/image";
 import { FeaturedProductsCarousel } from "@/components/featured-products-carousel";
 import { HomepageOrderSection } from "@/components/homepage-order-section";
@@ -40,9 +41,10 @@ const siteGuide = [
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [data, uploadOptions] = await Promise.all([
+  const [data, uploadOptions, media] = await Promise.all([
     getStorefrontData(),
     getUploadProductOptions(),
+    getMediaRegistry(),
   ]);
   const featured = data.featuredProducts.length
     ? data.featuredProducts.slice(0, 3)
@@ -74,29 +76,34 @@ export default async function Home() {
         />
       ) : null}
 
-      <section className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:py-12">
-        <div className="rounded-3xl border border-rose/20 bg-white/80 p-6 text-center shadow-sm sm:p-8">
-          <p className="hero-kicker">{data.settings.heroBadge}</p>
-          <h1 className="mx-auto mt-4 max-w-3xl text-3xl leading-tight text-forest sm:text-4xl lg:text-5xl">
-            {data.settings.heroTitle}
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-base text-foreground/80 sm:text-lg">
-            {data.settings.heroDescription}
-          </p>
-          <div className="mt-6 flex items-center justify-center overflow-hidden rounded-3xl border border-rose/25 bg-white/75 p-3">
+      <section className="storefront-hero mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:py-12">
+        <div className="storefront-hero-panel grid overflow-hidden border border-rose/20 bg-white/85 shadow-sm lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="storefront-hero-copy flex flex-col justify-center p-6 sm:p-9 lg:p-12">
+            <p className="hero-kicker">{data.settings.heroBadge}</p>
+            <h1 className="mt-4 max-w-xl text-4xl leading-tight text-forest sm:text-5xl lg:text-6xl">
+              {data.settings.heroTitle}
+            </h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-foreground/80 sm:text-lg">
+              {data.settings.heroDescription}
+            </p>
+            <div className="storefront-hero-actions mt-6 flex flex-wrap gap-3">
+              <Link href={data.settings.primaryCtaHref} className="border border-forest bg-forest px-5 py-3 font-semibold text-white hover:bg-forest/90">{data.settings.primaryCtaLabel}</Link>
+              <Link href={data.settings.secondaryCtaHref} className="border border-forest/40 px-5 py-3 font-semibold text-forest hover:bg-surface">{data.settings.secondaryCtaLabel}</Link>
+            </div>
+            <p className="mt-5 max-w-xl text-sm leading-relaxed text-foreground/65">
+              Ready-to-shop products, custom printing, seasonal drops, and orders for teams, schools, and businesses.
+            </p>
+          </div>
+          <div className="storefront-hero-art flex min-h-64 items-center justify-center border-t border-rose/15 bg-surface/70 p-6 sm:p-8 lg:border-l lg:border-t-0">
             <Image
-              src="/assets/img/MyWRDLogo.png"
-              alt="Wild Rose Designs logo"
+              src={mediaSlotUrl(media, "hero")}
+              alt="Wild Rose Designs"
               width={560}
               height={560}
               priority
-              className="h-[clamp(240px,34vh,360px)] w-auto max-w-full object-contain"
+              className="h-auto max-h-[440px] w-full object-contain"
             />
           </div>
-          <p className="mx-auto mt-5 max-w-3xl text-sm leading-relaxed text-foreground/80 sm:text-base">
-            Explore ready-to-shop products, upload your own design for custom printing, check out
-            seasonal drops, and contact us for team, school, or business orders.
-          </p>
         </div>
       </section>
 

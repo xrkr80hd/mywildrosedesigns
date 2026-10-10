@@ -15,6 +15,7 @@ type OrderFormProps = {
 export function OrderForm({ options }: OrderFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [shippingMethod, setShippingMethod] = useState<"pickup" | "shipping">("pickup");
   const hasAvailableOptions = options.length > 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -111,6 +112,12 @@ export function OrderForm({ options }: OrderFormProps) {
               </p>
             ) : null}
           </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-semibold text-forest">Discount code (optional)</span>
+            <input name="discountCode" maxLength={200} autoComplete="off" className="w-full border border-rose/20 px-3 py-2" />
+            <span className="block text-xs">Your discount will appear on the secure payment screen.</span>
+          </label>
+
           <label className="space-y-1">
             <span className="text-sm font-semibold text-forest">Quantity</span>
             <input
@@ -153,6 +160,15 @@ export function OrderForm({ options }: OrderFormProps) {
           />
         </label>
 
+        <fieldset className="delivery-options">
+          <legend>How would you like your order?</legend>
+          <label className={`delivery-card ${shippingMethod === "pickup" ? "is-selected" : ""}`}>
+            <input type="radio" name="shippingMethod" value="pickup" checked={shippingMethod === "pickup"} onChange={() => setShippingMethod("pickup")} /><span><strong>Local Pickup</strong><small>Pick up locally · No delivery charge</small></span><b>FREE</b>
+          </label>
+          <label className={`delivery-card ${shippingMethod === "shipping" ? "is-selected" : ""}`}>
+            <input type="radio" name="shippingMethod" value="shipping" checked={shippingMethod === "shipping"} onChange={() => setShippingMethod("shipping")} /><span><strong>Ship to me</strong><small>Delivered to your US address</small></span>
+          </label>
+        </fieldset>
         {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
 
           <button

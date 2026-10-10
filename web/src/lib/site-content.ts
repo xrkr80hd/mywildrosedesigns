@@ -55,6 +55,7 @@ export type SiteContentSettings = {
 };
 
 export const SITE_CONTENT_KEYS = [
+  "checkout_discount",
   "about_badge",
   "about_title",
   "about_intro",
@@ -96,6 +97,7 @@ type WelcomeSettingRow = {
 type LocalSiteContentStore = Partial<Record<SiteContentKey, string>>;
 
 const DEFAULT_VALUES_BY_KEY: Record<SiteContentKey, string> = {
+  checkout_discount: '{"codes":[]}',
   about_badge: "About Wild Rose",
   about_title: "Our Story",
   about_intro:

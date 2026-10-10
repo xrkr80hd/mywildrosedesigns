@@ -1,0 +1,14 @@
+"use client";
+import { useState, useTransition } from "react";
+import { DEFAULT_APPEARANCE, FONT_CHOICES, type Appearance } from "@/lib/appearance-options";
+import { updateAppearance } from "./actions";
+export function AppearanceEditor({ initial }: { initial: Appearance }) {
+ const [value, setValue] = useState(initial); const [notice,setNotice] = useState(""); const [pending,startTransition] = useTransition();
+ return <form className="grid gap-5" onSubmit={e=>{e.preventDefault(); const data=new FormData(e.currentTarget); startTransition(async()=>{const result=await updateAppearance(data);setNotice(result.error??result.success??"");});}}>
+ <details open className="border border-forest/20 bg-white p-5"><summary className="cursor-pointer font-semibold">Website fonts</summary><div className="mt-5 grid gap-5 sm:grid-cols-2">
+ {(["bodyFont","headingFont"] as const).map(key=><label key={key} className="grid gap-2 text-sm font-semibold">{key==="bodyFont"?"Body font":"Heading font"}<select className="border border-forest/25 bg-surface p-3" name={key} value={value[key]} onChange={e=>setValue({...value,[key]:e.target.value})}>{Object.entries(FONT_CHOICES).map(([id,font])=><option key={id} value={id}>{font.label}</option>)}</select></label>)}
+ <label className="grid gap-2 text-sm">Body size: {value.bodySize}px<input name="bodySize" type="range" min="14" max="20" value={value.bodySize} onChange={e=>setValue({...value,bodySize:Number(e.target.value)})}/></label>
+ <label className="grid gap-2 text-sm">Heading size: {Math.round(value.headingScale*100)}%<input name="headingScale" type="range" min="0.9" max="1.2" step="0.05" value={value.headingScale} onChange={e=>setValue({...value,headingScale:Number(e.target.value)})}/></label></div></details>
+ <section aria-label="Font preview" className="border border-rose/20 bg-surface p-6" style={{fontFamily:FONT_CHOICES[value.bodyFont].body,fontSize:value.bodySize}}><p className="text-xs uppercase tracking-widest text-rose">Live preview</p><h2 className="my-4 text-forest" style={{fontFamily:FONT_CHOICES[value.headingFont].heading,fontSize:`${2.5*value.headingScale}rem`,lineHeight:1.15}}>Made personal. Made for you.</h2><p>Custom apparel, thoughtful gifts, and your next favorite design.</p><p className="mt-4 text-sm text-foreground/60">Preview only until you save. Admin fonts stay unchanged.</p></section>
+ <div className="flex flex-wrap gap-3"><button disabled={pending} className="bg-forest px-5 py-3 font-semibold text-white disabled:opacity-50">{pending?"Saving…":"Save fonts"}</button><button type="button" disabled={pending} onClick={()=>{setValue(DEFAULT_APPEARANCE);setNotice("Original fonts restored in preview. Save to apply.");}} className="border border-forest/25 bg-white px-5 py-3 font-semibold">Restore original</button></div><p role="status" className="text-sm text-forest">{notice}</p></form>;
+}

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { CheckoutClient } from "@/components/checkout-client";
 
 type CheckoutPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     cancelled?: string | string[];
-  };
+  }>;
 };
 
 export const metadata: Metadata = {
@@ -20,8 +20,8 @@ function asSingle(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default function CheckoutPage({ searchParams }: CheckoutPageProps) {
-  const wasCancelled = asSingle(searchParams?.cancelled) === "1";
+export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
+  const wasCancelled = asSingle((await searchParams)?.cancelled) === "1";
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">

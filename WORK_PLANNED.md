@@ -269,3 +269,13 @@ Deferred until bundle workflow is functional.
 - [ ] Configure `ALERT_WEBHOOK_URL` receiver and test payload delivery.
 - [ ] Configure Stripe webhook endpoint for `/api/webhooks/stripe` in production.
 - [ ] Run one real paid checkout in production to confirm owner + customer emails.
+
+## Discount handler
+- [ ] Link existing Stripe promotion code in admin, optional automatic application, retain customer code entry.
+- [ ] Verify checkout configuration, auth, lint and build.
+
+## Authorized website update
+- [ ] Website discount registry including named Stripe coupons; add/remove via admin.
+- [ ] Pickup default in cart, checkout and upload flow.
+- [ ] Font editor, media manager and modern visual styling.
+- [ ] Validate routes, pricing, auth and production deployment.

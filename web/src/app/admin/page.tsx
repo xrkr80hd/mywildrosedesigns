@@ -1109,6 +1109,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           messages, uploads, and orders from one dashboard.
         </p>
 
+        <section aria-label="Website studio" className="mt-5 grid gap-3 sm:grid-cols-3">
+          {[
+            { href: "/admin/discounts", title: "Discount Codes", detail: "Add or remove checkout offers", color: "border-rose/35 bg-rose/5" },
+            { href: "/admin/appearance", title: "Fonts & Style", detail: "Preview fonts and text sizes", color: "border-gold/35 bg-gold/5" },
+            { href: "/admin/media", title: "Website Graphics", detail: "Upload, replace, and assign images", color: "border-forest/35 bg-forest/5" },
+          ].map(item => <Link key={item.href} href={item.href} className={`border p-4 transition hover:bg-white ${item.color}`}><span className="block text-lg font-semibold text-forest">{item.title}</span><span className="mt-1 block text-sm text-foreground/70">{item.detail}</span></Link>)}
+        </section>
+        <details className="mt-5 border border-rose/20 bg-white/75 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-forest">Help & encouragement</summary>
         <Link
           href="/admin/help"
           className="mt-5 block rounded-2xl border border-rose/30 bg-rose/10 px-4 py-4 text-left transition hover:border-rose/50 hover:bg-rose/15 sm:px-5"
@@ -1127,6 +1136,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             Jesus&apos; name. Amen. Brother Ben.
           </p>
         </Link>
+        </details>
 
         <details className="mt-5 border border-rose/20 bg-white/75 p-3 md:hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
