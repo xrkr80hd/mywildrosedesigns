@@ -884,3 +884,14 @@ details[open] > .admin-expand-summary .admin-expand-caret {
 .storefront-appearance .text-sm { font-size:calc(.875rem * var(--store-body-ratio)); }
 .storefront-appearance .text-base { font-size:var(--store-body-size); }
 .storefront-appearance .text-lg { font-size:calc(1.125rem * var(--store-body-ratio)); }
+
+.hot-item-popup {
+  transform-origin: bottom right;
+  transition: opacity 600ms ease, transform 600ms cubic-bezier(.22, 1, .36, 1), visibility 600ms;
+}
+.hot-item-popup-open { opacity: 1; transform: translateY(0) scale(1); visibility: visible; }
+.hot-item-popup-hidden { opacity: 0; transform: translateY(18px) scale(.985); visibility: hidden; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .hot-item-popup { transition: none; }
+  .hot-item-popup-open, .hot-item-popup-hidden { transform: none; }
+}

@@ -25,7 +25,7 @@ test('pickup is the safe default for both request schemas', async()=>{
  const absoluteZod = new URL('../node_modules/zod/index.js',import.meta.url).href;
  const transpiled=ts.transpileModule(schemaSource,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace('"zod"',JSON.stringify(absoluteZod));
  const {checkoutRequestSchema,cartCheckoutRequestSchema}=await import(`data:text/javascript;base64,${Buffer.from(transpiled).toString('base64')}`);
- const base={customerName:'Test User',customerEmail:'test@example.com'};
+ const base={customerName:'Test User',customerEmail:'test@example.com',pickupLocation:'Alexandria'};
  assert.equal(checkoutRequestSchema.parse({...base,productOptionId:'transfer',quantity:1}).shippingMethod,'pickup');
  assert.equal(cartCheckoutRequestSchema.parse({...base,items:[{id:'test',quantity:1}]}).shippingMethod,'pickup');
  assert.equal(cartCheckoutRequestSchema.parse({...base,shippingMethod:'shipping',items:[{id:'test',quantity:1}]}).shippingMethod,'shipping');

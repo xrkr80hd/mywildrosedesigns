@@ -290,6 +290,7 @@ export async function POST(request: Request) {
     const noteBlocks = [
       normalizeOptionalText(parsed.data.notes),
       `Fulfillment: ${shippingMethod === "pickup" ? "Local Pickup" : "Shipping"}`,
+      shippingMethod === "pickup" ? `Pickup location: ${parsed.data.pickupLocation}` : null,
       `Cart items: ${JSON.stringify(cartSummary)}`,
     ].filter((value): value is string => Boolean(value));
 
@@ -363,6 +364,7 @@ export async function POST(request: Request) {
         order_id: createdOrderId,
         checkout_type: "cart",
         shipping_method: shippingMethod,
+        ...(shippingMethod === "pickup" ? { pickup_location: parsed.data.pickupLocation! } : {}),
       },
       line_items: lineItems,
       ...discountOptions,

@@ -499,3 +499,8 @@ Known limitation:
 
 - Production deployment `dpl_4UGpRQtjwCypmGvPcBRKCDKrdT8Q` reached READY with main commit `4133f055848856ad3c2acbd3fa45e919ad1f259c`. Live browser verified homepage images, real product add-to-cart, pickup $13 total and explicit shipping $18.99 total for the $13 product, discount input, and custom upload default pickup. Verification cart cleared; no checkout submitted. Protected admin routes redirect to login; no deployment error logs observed.
 - Browser screenshot review covered desktop; mobile rendering and authenticated live admin save/upload were not exercised. Prior production deployment `dpl_GLxQQFTzmZ4cufyMEVAw81wzHWGG` remains available for rollback.
+
+## Pickup cities and gentle popup — 2026-10-11
+- Required Alexandria, Pineville or Simpson for Local Pickup in cart and custom upload checkout. Saved selected city in existing order notes and Stripe metadata; no addresses or instructions per clarified user request. Shipping does not require a city.
+- Homepage popup waits two seconds after window load (or mount if loaded), enters/exits smoothly over 600ms, honors reduced motion and cannot receive keyboard focus while hidden. Existing CTA and 10-second auto-dismiss preserved.
+- Verified 18 tests, TypeScript, targeted ESLint and production build. No live test orders created.

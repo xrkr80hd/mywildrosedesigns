@@ -279,3 +279,13 @@ Deferred until bundle workflow is functional.
 - [x] Pickup default in cart, checkout and upload flow.
 - [x] Font editor, media manager and modern visual styling.
 - [x] Validate routes, pricing, auth and production deployment.
+
+## Pickup cities and gentle popup — authorized 2026-10-11
+- [x] Require Alexandria, Pineville or Simpson for Local Pickup in both order flows; save with order and Stripe metadata. No addresses or instructions per user correction.
+- [x] Delay homepage popup two seconds after load with smooth accessible animation.
+- [ ] Validate, publish and check live routes without test orders.
+
+## Expanded font studio — authorized 2026-10-11
+- [ ] Upload multiple font files; select uploaded fonts.
+- [ ] Independent heading, subheading and content size/color controls.
+- [ ] Validate persistence, safe font rendering and deployment.

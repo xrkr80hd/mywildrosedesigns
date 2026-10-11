@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PickupLocationField } from "@/components/pickup-location-field";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CART_KEY, CartItem, formatVariantLabel, sanitizeCartItems } from "@/lib/cart";
 
@@ -94,6 +95,7 @@ export function CheckoutClient() {
       discountCode: String(formData.get("discountCode") ?? ""),
       notes: String(formData.get("notes") ?? ""),
       shippingMethod,
+      pickupLocation: shippingMethod === "pickup" ? String(formData.get("pickupLocation") ?? "") : undefined,
       items: items.map((item) => ({
         id: item.id,
         variantId: item.variantId,
@@ -216,6 +218,7 @@ export function CheckoutClient() {
               <span><strong>Ship to me</strong><small>Delivered to your US address</small></span><b>{formatUsd(SHIPPING)}</b>
             </label>
           </fieldset>
+          {shippingMethod === "pickup" && <PickupLocationField />}
 
           {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
 

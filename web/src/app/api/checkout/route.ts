@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       productOptionId: formData.get("productOptionId"),
       quantity: formData.get("quantity"),
       shippingMethod: formData.get("shippingMethod") ?? "pickup",
+      pickupLocation: formData.get("pickupLocation") ?? undefined,
       notes: formData.get("notes"),
       discountCode: formData.get("discountCode") ?? "",
     });
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
         customer_name: parsedPayload.data.customerName,
         customer_email: parsedPayload.data.customerEmail,
         customer_phone: normalizeOptionalText(parsedPayload.data.customerPhone),
-        notes: [normalizeOptionalText(parsedPayload.data.notes), `Fulfillment: ${parsedPayload.data.shippingMethod === "shipping" ? "Shipping" : "Local Pickup"}`].filter(Boolean).join("\n\n"),
+        notes: [normalizeOptionalText(parsedPayload.data.notes), `Fulfillment: ${parsedPayload.data.shippingMethod === "shipping" ? "Shipping" : "Local Pickup"}`, parsedPayload.data.shippingMethod === "pickup" ? `Pickup location: ${parsedPayload.data.pickupLocation}` : null].filter(Boolean).join("\n\n"),
         product_option: selectedOption.id,
         quantity: parsedPayload.data.quantity,
         amount_cents: amountCents,
@@ -186,6 +187,7 @@ export async function POST(request: Request) {
         order_id: orderId,
         product_option: selectedOption.id,
         shipping_method: parsedPayload.data.shippingMethod,
+        ...(parsedPayload.data.shippingMethod === "pickup" ? { pickup_location: parsedPayload.data.pickupLocation! } : {}),
       },
       line_items: [
         {

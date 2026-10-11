@@ -1,5 +1,6 @@
 "use client";
 
+import { PickupLocationField } from "@/components/pickup-location-field";
 import { FormEvent, useState } from "react";
 import type { ProductOption } from "@/lib/product-options";
 
@@ -169,6 +170,7 @@ export function OrderForm({ options }: OrderFormProps) {
             <input type="radio" name="shippingMethod" value="shipping" checked={shippingMethod === "shipping"} onChange={() => setShippingMethod("shipping")} /><span><strong>Ship to me</strong><small>Delivered to your US address</small></span>
           </label>
         </fieldset>
+          {shippingMethod === "pickup" && <PickupLocationField />}
         {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
 
           <button

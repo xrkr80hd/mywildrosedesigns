@@ -33,39 +33,43 @@ export function HotItemPopup({
 }: HotItemPopupProps) {
   const [isDismissed, setIsDismissed] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setIsOpen(true);
-    }, 120);
-
+    let openTimer: number | undefined;
+    function scheduleOpen() {
+      openTimer = window.setTimeout(() => setIsOpen(true), 2_000);
+    }
+    if (document.readyState === "complete") {
+      scheduleOpen();
+    } else {
+      window.addEventListener("load", scheduleOpen, { once: true });
+    }
     return () => {
-      window.clearTimeout(timer);
+      window.removeEventListener("load", scheduleOpen);
+      window.clearTimeout(openTimer);
     };
   }, []);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
+    if (!isOpen) return;
     const autoDismissTimer = window.setTimeout(() => {
       setIsOpen(false);
-      window.setTimeout(() => {
-        setIsDismissed(true);
-      }, 260);
+      setIsClosing(true);
     }, 10_000);
-
-    return () => {
-      window.clearTimeout(autoDismissTimer);
-    };
+    return () => window.clearTimeout(autoDismissTimer);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isClosing) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const removalTimer = window.setTimeout(() => setIsDismissed(true), reducedMotion ? 0 : 600);
+    return () => window.clearTimeout(removalTimer);
+  }, [isClosing]);
 
   function handleDismiss() {
     setIsOpen(false);
-    window.setTimeout(() => {
-      setIsDismissed(true);
-    }, 260);
+    setIsClosing(true);
   }
 
   if (isDismissed) {
@@ -74,11 +78,10 @@ export function HotItemPopup({
 
   return (
     <aside
-      className={`fixed bottom-4 right-4 z-40 w-[min(360px,calc(100vw-2rem))] rounded-2xl border border-rose/30 bg-white p-4 shadow-2xl transition-all duration-300 ease-out ${
-        isOpen
-          ? "translate-y-0 scale-100 opacity-100"
-          : "pointer-events-none translate-y-3 scale-[0.98] opacity-0"
-      }`}
+      aria-label={title || "Store promotion"}
+      aria-hidden={!isOpen}
+      inert={!isOpen}
+      className={`hot-item-popup fixed bottom-4 right-4 z-40 w-[min(360px,calc(100vw-2rem))] rounded-2xl border border-rose/30 bg-white p-4 shadow-2xl ${isOpen ? "hot-item-popup-open" : "hot-item-popup-hidden"}`}
     >
       <button
         type="button"
