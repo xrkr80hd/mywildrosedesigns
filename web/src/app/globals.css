@@ -886,12 +886,25 @@ details[open] > .admin-expand-summary .admin-expand-caret {
 .storefront-appearance .text-lg { font-size:calc(1.125rem * var(--store-body-ratio)); }
 
 .hot-item-popup {
-  transform-origin: bottom right;
-  transition: opacity 600ms ease, transform 600ms cubic-bezier(.22, 1, .36, 1), visibility 600ms;
+  transition: opacity var(--popup-fade-duration, 2s) ease-in-out, visibility var(--popup-fade-duration, 2s);
 }
-.hot-item-popup-open { opacity: 1; transform: translateY(0) scale(1); visibility: visible; }
-.hot-item-popup-hidden { opacity: 0; transform: translateY(18px) scale(.985); visibility: hidden; pointer-events: none; }
+.hot-item-popup-open { opacity: 1; visibility: visible; }
+.hot-item-popup-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .hot-item-popup { transition: none; }
   .hot-item-popup-open, .hot-item-popup-hidden { transform: none; }
 }
+
+/* Owner-controlled typography is scoped to the storefront and preview. */
+.storefront-appearance[data-custom-typography="true"] :is(p,li):not([class*="text-white"]):not([class*="text-rose"]):not([class*="text-gold"]) { color:var(--store-body-color); }
+.storefront-appearance[data-custom-typography="true"] h1 { font-family:var(--store-heading); font-size:clamp(1.75rem,6vw,var(--store-heading-size)); color:var(--store-heading-color); }
+.storefront-appearance[data-custom-typography="true"] :is(h2,h3,h4) { font-family:var(--store-subheading); color:var(--store-subheading-color); }
+.storefront-appearance[data-custom-typography="true"] h2 { font-size:clamp(1.25rem,4vw,var(--store-subheading-size)); }
+.storefront-appearance[data-custom-typography="true"] h3 { font-size:calc(var(--store-subheading-size) * .8); }
+.storefront-appearance[data-custom-typography="true"] h4 { font-size:calc(var(--store-subheading-size) * .65); }
+.font-control { display:grid; gap:.5rem; font-size:.875rem; font-weight:600; }
+.font-control :is(select,input[type="text"]) { padding:.7rem; border:1px solid rgba(47,75,60,.25); background:var(--surface); min-width:0; }
+.font-control input[type="color"] { width:100%; height:2.75rem; padding:.25rem; border:1px solid rgba(47,75,60,.25); cursor:pointer; }
+.font-color-picker .react-colorful { width:100%; max-width:20rem; }
+.font-color-picker .react-colorful :is(.react-colorful__saturation,.react-colorful__hue) { border-radius:0; }
+.font-color-picker:disabled { opacity:.6; pointer-events:none; }

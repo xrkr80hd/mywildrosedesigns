@@ -1,3 +1,4 @@
+import { fontFaceCss } from "@/lib/appearance-options";
 import { getAppearance } from "@/lib/appearance";
 import { AppearanceScope } from "@/components/appearance-scope";
 import { SiteShell } from "@/components/site-shell";
@@ -84,14 +85,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const appearance = await getAppearance();
   return (
     <html lang="en">
+      <head><style>{fontFaceCss(appearance.fonts)}</style></head>
       <body className={`${headingFont.variable} ${bodyFont.variable} antialiased`}>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
-        <AppearanceScope appearance={await getAppearance()}><SiteShell>{children}</SiteShell></AppearanceScope>
+        <AppearanceScope appearance={appearance}><SiteShell>{children}</SiteShell></AppearanceScope>
         <VisitAlertPing />
         <Analytics />
         <SpeedInsights />

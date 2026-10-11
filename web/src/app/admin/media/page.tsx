@@ -1,3 +1,5 @@
+import { readPopupTimingRecord } from "@/lib/popup-timing";
+import { PopupTimingControls } from "./popup-timing-controls";
 import Link from "next/link";
 import Image from "next/image";
 import { AdminImageUploadField } from "@/components/admin-image-upload-field";
@@ -8,12 +10,14 @@ export default async function AdminMediaPage({ searchParams }: { searchParams: P
   const params = await searchParams;
   const registry = await getMediaRegistry(true).catch(() => null);
   if (!registry) return <main className="admin-content mx-auto max-w-6xl p-8"><h1 className="text-3xl">Media Manager</h1><p role="alert" className="mt-4">Media storage is unavailable. No changes can be saved. Try again when the connection is restored.</p><Link href="/admin">Back to Admin</Link></main>;
+  const popupTiming = await readPopupTimingRecord().catch(() => null);
   return <main className="admin-content mx-auto w-full max-w-6xl px-4 py-8">
     <h1 className="text-3xl text-forest">Media Manager</h1>
     <p className="mt-2">Upload and preview images, then choose where they appear.</p>
     <Link href="/admin" className="mt-4 inline-block border border-forest px-4 py-2">Back to Admin</Link>
     {params.message ? <p role="status" className="mt-4 border border-green-600 p-3">{params.message}</p> : null}
     {params.error ? <p role="alert" className="mt-4 border border-red-600 p-3">{params.error}</p> : null}
+    {popupTiming ? <PopupTimingControls initial={popupTiming.timing} /> : <p role="alert" className="mt-4">Popup timing settings are unavailable. Try again later.</p>}
     <details className="mt-6 border border-rose/30 bg-white p-4" open><summary className="cursor-pointer text-xl font-semibold">Add Image</summary>
       <form action={updateMedia} className="mt-4 grid gap-4"><input type="hidden" name="operation" value="add" />
         <label>Image name<input required maxLength={120} name="name" className="mt-1 block w-full border p-2" /></label>

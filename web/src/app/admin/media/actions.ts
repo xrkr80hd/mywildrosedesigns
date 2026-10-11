@@ -1,4 +1,6 @@
 "use server";
+import { savePopupTiming } from "@/lib/popup-timing";
+import { parsePopupTiming } from "@/lib/popup-timing-options";
 import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -45,4 +47,18 @@ export async function updateMedia(form: FormData) {
   }
   revalidatePath("/", "layout");
   redirect(`/admin/media?message=${encodeURIComponent(message)}`);
+}
+
+export async function updatePopupTiming(form: FormData) {
+  const { username, password } = getAdminCredentials();
+  const token = (await cookies()).get(ADMIN_SESSION_COOKIE)?.value;
+  if (!isAdminAuthBypassed() && (!username || !password || token !== encodeAdminSession(username, password))) throw new Error("Unauthorized.");
+  try {
+    const delaySeconds = Number(form.get("delaySeconds"));
+    const fadeSeconds = Number(form.get("fadeSeconds"));
+    if (!Number.isFinite(delaySeconds) || !Number.isFinite(fadeSeconds)) throw new Error("Enter valid timing values.");
+    await savePopupTiming(parsePopupTiming({ delaySeconds, fadeSeconds }));
+  } catch (error) { redirect(`/admin/media?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to save popup settings.")}`); }
+  revalidatePath("/");
+  redirect("/admin/media?message=Popup%20timing%20saved.");
 }

@@ -504,3 +504,12 @@ Known limitation:
 - Required Alexandria, Pineville or Simpson for Local Pickup in cart and custom upload checkout. Saved selected city in existing order notes and Stripe metadata; no addresses or instructions per clarified user request. Shipping does not require a city.
 - Homepage popup waits two seconds after window load (or mount if loaded), enters/exits smoothly over 600ms, honors reduced motion and cannot receive keyboard focus while hidden. Existing CTA and 10-second auto-dismiss preserved.
 - Verified 18 tests, TypeScript, targeted ESLint and production build. No live test orders created.
+
+- Live pickup release `b052752cd0cd0e3e6b30b296040f08d9c5bdd6e1` verified in browser: required city choices appear on standard/custom checkout; shipping hides city field; popup starts hidden then becomes visible after delay. Verification cart cleared without submitting checkout.
+
+## Expanded owner font editor and popup controls — 2026-10-11
+- Reused pinned MIT components from JedWatson/react-select (font search and font samples) and omgovich/react-colorful (color picker + hex input), styled to match existing Fonts & Style admin page.
+- Added owner-authenticated multi-file WOFF2/WOFF/TTF/OTF uploads, a persistent font collection, removal with original-font fallback, three font roles with independent sizes/colors, live preview, and original-style reset. Preserved storefront appearance until the owner saves changes; uploads alone do not change typography.
+- Added validated font-only public storage bucket creation on first real upload; public writes remain blocked. Settings use existing inactive welcome_posts rows, guarded updates, safe numeric/color/font URL parsing, and font signature/table-bound validation. Initialized one production appearance row without overriding existing preferences; no test font upload.
+- Added Popup Timing sliders under Website Graphics: 5-second default wait after load, 2-second smooth opacity fade; wait adjustable 2–20 seconds and fade .8–5 seconds. Preserved reduced motion, close button, and automatic dismissal after 10 fully visible seconds, paused on focus/hover. Initialized one production timing row without overriding owner changes.
+- Verified all 30 tests, targeted ESLint, TypeScript and full production build. No live payment, inventory, customer, or font upload test writes. Live admin upload/save and mobile browser rendering remain unexercised.

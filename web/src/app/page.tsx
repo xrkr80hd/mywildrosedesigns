@@ -1,3 +1,4 @@
+import { getPopupTiming } from "@/lib/popup-timing";
 import Link from "next/link";
 import { getMediaRegistry, mediaSlotUrl } from "@/lib/media-management";
 import Image from "next/image";
@@ -41,10 +42,11 @@ const siteGuide = [
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [data, uploadOptions, media] = await Promise.all([
+  const [data, uploadOptions, media, popupTiming] = await Promise.all([
     getStorefrontData(),
     getUploadProductOptions(),
     getMediaRegistry(),
+    getPopupTiming(),
   ]);
   const featured = data.featuredProducts.length
     ? data.featuredProducts.slice(0, 3)
@@ -54,6 +56,7 @@ export default async function Home() {
     <main className="hero-mesh">
       {data.popup.enabled ? (
         <HotItemPopup
+          timing={popupTiming}
           key={`${data.popup.title}:${data.popup.message}:${data.popup.product?.id ?? "none"}:${data.popup.ctaHref}`}
           promoLabel={data.popup.promoLabel}
           title={data.popup.title}

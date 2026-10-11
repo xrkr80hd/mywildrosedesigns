@@ -1,21 +1,21 @@
 "use server";
-import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { ADMIN_SESSION_COOKIE, encodeAdminSession } from "@/lib/admin-session";
-import { getAdminCredentials, isAdminAuthBypassed } from "@/lib/env";
-import { saveAppearance } from "@/lib/appearance";
-import { parseAppearance } from "@/lib/appearance-options";
-export async function updateAppearance(form: FormData) {
-  if (!isAdminAuthBypassed()) {
-    const { username, password } = getAdminCredentials();
-    const token = encodeAdminSession(username, password);
-    const session = (await cookies()).get(ADMIN_SESSION_COOKIE)?.value;
-    const basic = (await headers()).get("authorization");
-    if (!username || !password || (session !== token && basic !== `Basic ${token}`)) return { error: "Please sign in to admin again." };
-  }
-  try {
-    await saveAppearance(parseAppearance({ bodyFont: form.get("bodyFont"), headingFont: form.get("headingFont"), bodySize: Number(form.get("bodySize")), headingScale: Number(form.get("headingScale")) }));
-    revalidatePath("/", "layout");
-    return { success: "Fonts saved. Your storefront now uses these settings." };
-  } catch { return { error: "Settings could not be saved. Please try again." }; }
+import { isAppearanceAdmin } from "@/lib/appearance-auth";
+import { mutateAppearance,saveAppearance } from "@/lib/appearance";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { DEFAULT_APPEARANCE,UUID_PATTERN,FONT_BUCKET } from "@/lib/appearance-options";
+export async function updateAppearance(form:FormData){
+ if(!await isAppearanceAdmin())return {error:"Please sign in to admin again."};
+ try{
+ const fields=form.get("reset")==="true"?DEFAULT_APPEARANCE:{customTypography:form.get("customTypography")==="true",bodyFont:String(form.get("bodyFont")),headingFont:String(form.get("headingFont")),subheadingFont:String(form.get("subheadingFont")),bodySize:Number(form.get("bodySize")),headingSize:Number(form.get("headingSize")),subheadingSize:Number(form.get("subheadingSize")),bodyColor:String(form.get("bodyColor")),headingColor:String(form.get("headingColor")),subheadingColor:String(form.get("subheadingColor"))};
+ const appearance=await saveAppearance(fields); revalidatePath("/","layout");return {success:"Website fonts, sizes, and colors saved.",appearance};
+ }catch(error){return {error:error instanceof Error?error.message:"Could not save. Please try again."};}
+}
+export async function removeUploadedFont(id:string){
+ if(!await isAppearanceAdmin())return {error:"Please sign in to admin again."};
+ if(!UUID_PATTERN.test(id))return {error:"Invalid font."};
+ try{let removedPath:string|undefined;const appearance=await mutateAppearance(current=>{removedPath=current.fonts.find(font=>font.id===id)?.path;return {...current,fonts:current.fonts.filter(f=>f.id!==id),bodyFont:current.bodyFont===id?"original":current.bodyFont,headingFont:current.headingFont===id?"original":current.headingFont,subheadingFont:current.subheadingFont===id?"original":current.subheadingFont};});
+ if(removedPath)await getSupabaseAdminClient().storage.from(FONT_BUCKET).remove([removedPath]);
+ revalidatePath("/","layout");return {success:"Font removed from your collection. Any saved use was restored to the original font.",appearance};
+ }catch(error){return {error:error instanceof Error?error.message:"Could not remove font."};}
 }

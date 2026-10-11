@@ -2,10 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { AddToCartButton } from "@/components/add-to-cart-button";
 
+import { DEFAULT_POPUP_TIMING, parsePopupTiming, type PopupTiming } from "@/lib/popup-timing-options";
+
 type HotItemPopupProps = {
+  timing?: PopupTiming;
   promoLabel: string;
   title: string;
   message: string;
@@ -23,6 +26,7 @@ type HotItemPopupProps = {
 };
 
 export function HotItemPopup({
+  timing = DEFAULT_POPUP_TIMING,
   promoLabel,
   title,
   message,
@@ -31,14 +35,18 @@ export function HotItemPopup({
   ctaHref,
   product,
 }: HotItemPopupProps) {
+  const { delaySeconds, fadeSeconds } = parsePopupTiming(timing);
+  const [hasEntered, setHasEntered] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
     let openTimer: number | undefined;
     function scheduleOpen() {
-      openTimer = window.setTimeout(() => setIsOpen(true), 2_000);
+      openTimer = window.setTimeout(() => setIsOpen(true), delaySeconds * 1000);
     }
     if (document.readyState === "complete") {
       scheduleOpen();
@@ -49,23 +57,30 @@ export function HotItemPopup({
       window.removeEventListener("load", scheduleOpen);
       window.clearTimeout(openTimer);
     };
-  }, []);
+  }, [delaySeconds]);
 
   useEffect(() => {
     if (!isOpen) return;
+    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : fadeSeconds * 1000;
+    const enteredTimer = window.setTimeout(() => setHasEntered(true), duration);
+    return () => window.clearTimeout(enteredTimer);
+  }, [isOpen, fadeSeconds]);
+
+  useEffect(() => {
+    if (!isOpen || !hasEntered || isHovered || isFocused) return;
     const autoDismissTimer = window.setTimeout(() => {
       setIsOpen(false);
       setIsClosing(true);
     }, 10_000);
     return () => window.clearTimeout(autoDismissTimer);
-  }, [isOpen]);
+  }, [isOpen, hasEntered, isHovered, isFocused]);
 
   useEffect(() => {
     if (!isClosing) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const removalTimer = window.setTimeout(() => setIsDismissed(true), reducedMotion ? 0 : 600);
+    const removalTimer = window.setTimeout(() => setIsDismissed(true), reducedMotion ? 0 : fadeSeconds * 1000);
     return () => window.clearTimeout(removalTimer);
-  }, [isClosing]);
+  }, [isClosing, fadeSeconds]);
 
   function handleDismiss() {
     setIsOpen(false);
@@ -78,9 +93,16 @@ export function HotItemPopup({
 
   return (
     <aside
+      style={{ "--popup-fade-duration": `${fadeSeconds}s` } as CSSProperties}
       aria-label={title || "Store promotion"}
       aria-hidden={!isOpen}
       inert={!isOpen}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocusCapture={() => setIsFocused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsFocused(false);
+      }}
       className={`hot-item-popup fixed bottom-4 right-4 z-40 w-[min(360px,calc(100vw-2rem))] rounded-2xl border border-rose/30 bg-white p-4 shadow-2xl ${isOpen ? "hot-item-popup-open" : "hot-item-popup-hidden"}`}
     >
       <button
