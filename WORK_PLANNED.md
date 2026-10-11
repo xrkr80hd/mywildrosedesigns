@@ -288,8 +288,8 @@ Deferred until bundle workflow is functional.
 ## Expanded font studio — authorized 2026-10-11
 - [x] Upload multiple font files; select uploaded fonts.
 - [x] Independent heading, subheading and content size/color controls.
-- [ ] Validate persistence, safe font rendering and deployment.
+- [x] Validate persistence, safe font rendering and deployment.
 
 ## Slower popup controls — authorized 2026-10-11
 - [x] Default five-second delay and two-second fade, configurable sliders in Website Graphics.
-- [ ] Verify public behavior and owner-only settings.
+- [x] Verify public behavior and owner-only settings.
